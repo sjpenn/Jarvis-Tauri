@@ -1,0 +1,124 @@
+# JARVIS Configuration
+# Edit this file to customize your assistant
+
+llm:
+  provider: ollama
+  fast_model: qwen2.5:3b              # Fast responses (2-3B params)
+  primary_model: qwen2.5:14b-instruct-q5_K_M  # Deep thinking (14B)
+  fallback_model: phi4:latest
+  temperature: 0.7
+  max_tokens: 2048
+
+stt:
+  provider: whisper
+  model: large-v3-turbo
+  language: en
+  device: auto
+
+tts:
+  # Options: macos, elevenlabs, orpheus
+  provider: macos
+  voice: Samantha  # Or "Daniel" for British male
+  speed: 1.0
+
+wake_word:
+  enabled: true  # Wake word activation enabled
+  keyword: jarvis
+  sensitivity: 0.5
+
+vision:
+  provider: ollama
+  model: llava:7b  # or moondream, llama3.2-vision
+  camera_index: 0
+
+integrations:
+  calendar_enabled: true
+  email_enabled: true  # Enable for agentic email access
+  documents_enabled: false  # Requires embeddings setup
+  web_search_enabled: false  # Requires Perplexity API
+  tasks_enabled: true
+
+memory:
+  enabled: true
+  db_path: ~/.jarvis/memory.db
+  auto_extract_preferences: true
+
+# Agentic Orchestration Configuration
+# All actions from agents go through draft mode for approval
+
+agents:
+  email:
+    enabled: true
+    # Gmail accounts - download credentials from Google Cloud Console
+    gmail_accounts: []
+    #  - name: work
+    #    credentials_file: ~/.jarvis/gmail_work_credentials.json
+     - name: personal
+       credentials_file: ~/.jarvis/gmail_personal_credentials.json
+    
+    # Outlook accounts - register app in Azure Portal
+    outlook_accounts: []
+     - name: office
+       client_id: "afc81690-fadd-41fd-8d39-a96a2c92707e"
+
+  
+  calendar:
+    enabled: true
+    # macOS Calendar is always enabled
+    # Add Google Calendar credentials for unified view
+    google_calendar:
+      enabled: false
+      credentials_file: ~/.jarvis/gcal_credentials.json
+  
+  transport:
+    enabled: true
+    location: dc
+    
+    # Named locations with transit preferences
+    locations:
+      dc:
+        address: "Washington, DC"
+        latitude: 38.9072
+        longitude: -77.0369
+        preferred_stations:
+          - "Greensboro Station"
+          - "l'enfant plaza station"
+          - "metro center station"
+        preferred_modes:
+          - metro
+          # - bus
+          - rail
+    
+    # Transit providers - configure API keys as needed
+    providers:
+      - name: wmata
+        display_name: "WMATA Metro & Bus"
+        modes: [metro, bus]
+        api_key: "afa4f0928b2e4a078c2a5bada6fe2411"  # Primary key
+        api_key_secondary: "1645f0fe172c4649936683d7556be4ed"  # Backup
+        enabled: true
+      
+      - name: amtrak
+        display_name: "Amtrak"
+        modes: [rail]
+        enabled: false  # Enable when API configured
+      
+      - name: marc
+        display_name: "MARC Train"
+        modes: [rail]
+        enabled: false
+      
+      - name: vre
+        display_name: "VRE"
+        modes: [rail]
+        enabled: false
+      
+      - name: capital_bikeshare
+        display_name: "Capital Bikeshare"
+        modes: [bikeshare]
+        enabled: false
+      
+      - name: dc_circulator
+        display_name: "DC Circulator"
+        modes: [bus]
+        enabled: false

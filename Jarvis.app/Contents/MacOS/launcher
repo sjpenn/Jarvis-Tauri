@@ -1,0 +1,8 @@
+#!/usr/bin/env bash
+DIR="$(cd "$(dirname "$0")" && cd ../Resources/ || true; pwd)"
+# If jarvis.sh is in Resources, run it; otherwise run sibling jarvis.sh
+if [ -x "$DIR/jarvis.sh" ]; then
+  exec "$DIR/jarvis.sh" "$@"
+else
+  exec "$(dirname "$0")/jarvis.sh" "$@"
+fi
