@@ -120,3 +120,23 @@ agents:
         display_name: "DC Circulator"
         modes: [bus]
         enabled: false
+  
+  # Weather Agent - Get forecasts and packing suggestions
+  # Uses FREE NOAA Weather.gov API - No API key needed!
+  weather:
+    enabled: true
+    provider: weather.gov  # Free US government API
+    default_location: "Washington, DC"
+    units: imperial  # imperial or metric
+  
+  # Flight Agent - Track flight status
+  flight:
+    enabled: true
+    provider: aviationstack
+    api_key: "517f4d00ed5b6bc89962c1c8db215fbe"
+  
+  # Trip Planning Agent - Hotel search and cost planning
+  trip:
+    enabled: true
+    hotel_provider: demo  # Uses demo data until real API configured
+    api_key: ""  # Optional: Configure for real hotel API

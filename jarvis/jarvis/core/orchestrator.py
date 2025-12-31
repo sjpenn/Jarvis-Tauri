@@ -291,6 +291,62 @@ class JARVISOrchestrator:
             
             self.agent_coordinator.register_agent(transport_agent)
         
+        # Initialize Weather Agent if configured
+        # Uses FREE NOAA weather.gov API - no API key required!
+        weather_config = getattr(agents_config, 'weather', None) if agents_config else None
+        if weather_config and getattr(weather_config, 'enabled', False):
+            from jarvis.agents.weather_agent import WeatherAgent
+            from jarvis.agents.connectors.weather_connector import WeatherConnector
+            
+            weather_agent = WeatherAgent()
+            weather_agent.configure(
+                default_location=getattr(weather_config, 'default_location', 'Washington, DC'),
+            )
+            
+            units = getattr(weather_config, 'units', 'imperial')
+            
+            config = ConnectorConfig(
+                name='weather.gov',
+                connector_type='weather',
+                extra={'units': units},
+            )
+            weather_agent.register_connector(WeatherConnector(config))
+            self.agent_coordinator.register_agent(weather_agent)
+        
+        # Initialize Flight Agent if configured
+        flight_config = getattr(agents_config, 'flight', None) if agents_config else None
+        if flight_config and getattr(flight_config, 'enabled', False):
+            from jarvis.agents.flight_agent import FlightAgent
+            from jarvis.agents.connectors.flight_connector import FlightConnector
+            
+            flight_agent = FlightAgent()
+            
+            api_key = getattr(flight_config, 'api_key', '')
+            config = ConnectorConfig(
+                name='aviationstack',
+                connector_type='flight',
+                api_key=api_key,
+            )
+            flight_agent.register_connector(FlightConnector(config))
+            self.agent_coordinator.register_agent(flight_agent)
+        
+        # Initialize Trip Planning Agent if configured
+        trip_config = getattr(agents_config, 'trip', None) if agents_config else None
+        if trip_config and getattr(trip_config, 'enabled', False):
+            from jarvis.agents.trip_agent import TripPlanAgent
+            from jarvis.agents.connectors.hotel_connector import HotelConnector
+            
+            trip_agent = TripPlanAgent()
+            
+            api_key = getattr(trip_config, 'api_key', '')
+            config = ConnectorConfig(
+                name='hotel',
+                connector_type='hotel',
+                api_key=api_key,
+            )
+            trip_agent.register_connector(HotelConnector(config))
+            self.agent_coordinator.register_agent(trip_agent)
+        
         # Setup all agents
         await self.agent_coordinator.setup()
     

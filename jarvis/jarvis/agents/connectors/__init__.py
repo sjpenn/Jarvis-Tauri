@@ -9,6 +9,11 @@ from jarvis.agents.connectors.amtrak_connector import AmtrakConnector
 from jarvis.agents.connectors.vre_connector import VREConnector
 from jarvis.agents.connectors.marc_connector import MARCConnector
 
+# Travel connectors
+from jarvis.agents.connectors.weather_connector import WeatherConnector
+from jarvis.agents.connectors.flight_connector import FlightConnector
+from jarvis.agents.connectors.hotel_connector import HotelConnector
+
 __all__ = [
     "Connector",
     "ConnectorConfig",
@@ -17,5 +22,8 @@ __all__ = [
     "AmtrakConnector",
     "VREConnector",
     "MARCConnector",
+    "WeatherConnector",
+    "FlightConnector", 
+    "HotelConnector",
 ]
 
