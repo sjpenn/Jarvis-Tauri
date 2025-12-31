@@ -2,4 +2,13 @@
 
 from jarvis.agents.connectors.connector_base import Connector, ConnectorConfig
 
-__all__ = ["Connector", "ConnectorConfig"]
+# Transport connectors
+from jarvis.agents.connectors.wmata_connector import WMATAConnector
+from jarvis.agents.connectors.bikeshare_connector import CapitalBikeshareConnector
+
+__all__ = [
+    "Connector",
+    "ConnectorConfig",
+    "WMATAConnector",
+    "CapitalBikeshareConnector",
+]

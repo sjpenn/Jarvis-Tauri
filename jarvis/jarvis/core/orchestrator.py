@@ -231,15 +231,16 @@ class JARVISOrchestrator:
                 providers=providers,
             )
             
-            # Add WMATA connector if configured
+            # Add transport connectors based on config
             if providers:
+                from jarvis.agents.connectors.connector_base import ConnectorConfig
+                
                 for prov in providers:
                     prov_name = prov.get('name', '') if isinstance(prov, dict) else getattr(prov, 'name', '')
                     prov_enabled = prov.get('enabled', False) if isinstance(prov, dict) else getattr(prov, 'enabled', False)
                     
                     if prov_name == 'wmata' and prov_enabled:
                         from jarvis.agents.connectors.wmata_connector import WMATAConnector
-                        from jarvis.agents.connectors.connector_base import ConnectorConfig
                         
                         api_key = prov.get('api_key', '') if isinstance(prov, dict) else getattr(prov, 'api_key', '')
                         config = ConnectorConfig(
@@ -248,6 +249,15 @@ class JARVISOrchestrator:
                             api_key=api_key,
                         )
                         transport_agent.register_connector(WMATAConnector(config))
+                    
+                    elif prov_name == 'capital_bikeshare' and prov_enabled:
+                        from jarvis.agents.connectors.bikeshare_connector import CapitalBikeshareConnector
+                        
+                        config = ConnectorConfig(
+                            name='capital_bikeshare',
+                            connector_type='bikeshare',
+                        )
+                        transport_agent.register_connector(CapitalBikeshareConnector(config))
             
             self.agent_coordinator.register_agent(transport_agent)
         

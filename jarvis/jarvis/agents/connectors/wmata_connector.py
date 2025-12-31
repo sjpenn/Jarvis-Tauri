@@ -158,8 +158,11 @@ class WMATAConnector(Connector):
             results.extend(rail_results)
         
         if mode in ("bus", "any"):
-            # Bus requires stop ID, skip for now unless we have coordinates
-            pass
+            # Get bus predictions if we have a stop ID
+            stop_id = criteria.get("stop_id")
+            if stop_id:
+                bus_results = await self._get_bus_predictions(stop_id, limit)
+                results.extend(bus_results)
         
         return results[:limit]
     
@@ -222,6 +225,48 @@ class WMATAConnector(Connector):
             
         except Exception as e:
             print(f"WMATA rail prediction error: {e}")
+            return []
+    
+    async def _get_bus_predictions(
+        self,
+        stop_id: str,
+        limit: int = 10
+    ) -> List[Dict[str, Any]]:
+        """Get Metrobus predictions for a stop"""
+        try:
+            url = f"{BUS_PREDICTIONS}?StopID={stop_id}"
+            response = await self._client.get(url)
+            response.raise_for_status()
+            
+            data = response.json()
+            predictions = data.get("Predictions", [])
+            
+            results = []
+            for pred in predictions[:limit]:
+                # Parse minutes
+                minutes = pred.get("Minutes", 0)
+                
+                # Calculate arrival time
+                arrival_time = datetime.now()
+                if minutes > 0:
+                    from datetime import timedelta
+                    arrival_time = arrival_time + timedelta(minutes=minutes)
+                
+                results.append({
+                    "route": pred.get("RouteID", ""),
+                    "destination": pred.get("DirectionText", ""),
+                    "time": arrival_time.isoformat(),
+                    "minutes_away": minutes,
+                    "status": "On Time",
+                    "mode": "bus",
+                    "vehicle_id": pred.get("VehicleID", ""),
+                    "headsign": pred.get("DirectionText", ""),
+                })
+            
+            return results
+            
+        except Exception as e:
+            print(f"WMATA bus prediction error: {e}")
             return []
     
     async def execute_action(self, action_type: str, params: Dict[str, Any]) -> Any:

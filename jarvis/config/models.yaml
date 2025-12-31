@@ -50,16 +50,14 @@ agents:
   email:
     enabled: true
     # Gmail accounts - download credentials from Google Cloud Console
-    gmail_accounts: []
-    #  - name: work
-    #    credentials_file: ~/.jarvis/gmail_work_credentials.json
-     - name: personal
-       credentials_file: ~/.jarvis/gmail_personal_credentials.json
+    gmail_accounts:
+      - name: personal
+        credentials_file: ~/.jarvis/gmail_personal_credentials.json
     
     # Outlook accounts - register app in Azure Portal
-    outlook_accounts: []
-     - name: office
-       client_id: "afc81690-fadd-41fd-8d39-a96a2c92707e"
+    outlook_accounts:
+      - name: office
+        client_id: "afc81690-fadd-41fd-8d39-a96a2c92707e"
 
   
   calendar:
@@ -116,7 +114,7 @@ agents:
       - name: capital_bikeshare
         display_name: "Capital Bikeshare"
         modes: [bikeshare]
-        enabled: false
+        enabled: true  # Free GBFS feed, no API key needed!
       
       - name: dc_circulator
         display_name: "DC Circulator"
