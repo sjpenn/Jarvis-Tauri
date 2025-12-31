@@ -99,7 +99,7 @@ agents:
       - name: amtrak
         display_name: "Amtrak"
         modes: [rail]
-        enabled: false  # Enable when API configured
+        enabled: true  # Uses free Amtraker API - no key needed!
       
       - name: marc
         display_name: "MARC Train"

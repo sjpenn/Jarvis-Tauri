@@ -258,6 +258,16 @@ class JARVISOrchestrator:
                             connector_type='bikeshare',
                         )
                         transport_agent.register_connector(CapitalBikeshareConnector(config))
+                    
+                    elif prov_name == 'amtrak' and prov_enabled:
+                        from jarvis.agents.connectors.amtrak_connector import AmtrakConnector
+                        
+                        # No API key needed - uses free Amtraker API
+                        config = ConnectorConfig(
+                            name='amtrak',
+                            connector_type='amtrak',
+                        )
+                        transport_agent.register_connector(AmtrakConnector(config))
             
             self.agent_coordinator.register_agent(transport_agent)
         
