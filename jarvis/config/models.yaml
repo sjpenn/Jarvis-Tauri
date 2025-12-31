@@ -104,12 +104,12 @@ agents:
       - name: marc
         display_name: "MARC Train"
         modes: [rail]
-        enabled: false
+        enabled: true  # Uses free MTA GTFS-RT feed - no key needed!
       
       - name: vre
         display_name: "VRE"
         modes: [rail]
-        enabled: false
+        enabled: true  # Uses free GTFS-RT feed - no key needed!
       
       - name: capital_bikeshare
         display_name: "Capital Bikeshare"

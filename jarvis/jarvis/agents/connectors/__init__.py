@@ -6,6 +6,8 @@ from jarvis.agents.connectors.connector_base import Connector, ConnectorConfig
 from jarvis.agents.connectors.wmata_connector import WMATAConnector
 from jarvis.agents.connectors.bikeshare_connector import CapitalBikeshareConnector
 from jarvis.agents.connectors.amtrak_connector import AmtrakConnector
+from jarvis.agents.connectors.vre_connector import VREConnector
+from jarvis.agents.connectors.marc_connector import MARCConnector
 
 __all__ = [
     "Connector",
@@ -13,4 +15,7 @@ __all__ = [
     "WMATAConnector",
     "CapitalBikeshareConnector",
     "AmtrakConnector",
+    "VREConnector",
+    "MARCConnector",
 ]
+

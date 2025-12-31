@@ -268,6 +268,26 @@ class JARVISOrchestrator:
                             connector_type='amtrak',
                         )
                         transport_agent.register_connector(AmtrakConnector(config))
+                    
+                    elif prov_name == 'vre' and prov_enabled:
+                        from jarvis.agents.connectors.vre_connector import VREConnector
+                        
+                        # No API key needed - uses free VRE GTFS-RT feed
+                        config = ConnectorConfig(
+                            name='vre',
+                            connector_type='vre',
+                        )
+                        transport_agent.register_connector(VREConnector(config))
+                    
+                    elif prov_name == 'marc' and prov_enabled:
+                        from jarvis.agents.connectors.marc_connector import MARCConnector
+                        
+                        # No API key needed - uses free MTA GTFS-RT feed
+                        config = ConnectorConfig(
+                            name='marc',
+                            connector_type='marc',
+                        )
+                        transport_agent.register_connector(MARCConnector(config))
             
             self.agent_coordinator.register_agent(transport_agent)
         
