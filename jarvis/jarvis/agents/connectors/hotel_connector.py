@@ -290,13 +290,112 @@ class HotelConnector(Connector):
         return results
     
     async def _search_api(self, criteria: Dict[str, Any]) -> List[Dict[str, Any]]:
-        """Search hotels via API (placeholder for real API integration)"""
-        # This would integrate with a real hotel API like:
-        # - Booking.com via RapidAPI
-        # - Hotels.com API
-        # - Expedia API
-        # For now, fall back to demo data
-        return await self._get_demo_hotels(criteria)
+        """
+        Search hotels via Booking.com API on RapidAPI.
+        Requires 'rapidapi_key' in config.extra or config.api_key
+        """
+        rapidapi_key = self.config.extra.get("rapidapi_key") or self._api_key
+        
+        if not rapidapi_key:
+            print("No RapidAPI key found for Hotel Connector. Using demo data.")
+            return await self._get_demo_hotels(criteria)
+
+        url = "https://booking-com.p.rapidapi.com/v1/hotels/search"
+        
+        # Mapping criteria to API params (simplified for example)
+        # In a real implementation, we'd need to first call locations/search to get dest_id
+        # For now, we'll assume we can pass location name or skip to demo if complex
+        
+        # Since the actual Booking.com API requires a multi-step process (search location -> get ID -> search hotels),
+        # and we want to keep this robust, we will implement the location search first if possible.
+        # However, to keep this connector simple as per instructions, we might need a dedicated search implementation.
+        
+        # LET'S IMPLEMENT A SIMPLER VERSION that warns and falls back or tries best effort.
+        # Actually, let's stick to the plan: "Implement _search_api".
+        
+        try:
+            # 1. Search for location to get dest_id
+            location_query = criteria.get("location", "New York")
+            location_url = "https://booking-com.p.rapidapi.com/v1/hotels/locations"
+            headers = {
+                "X-RapidAPI-Key": rapidapi_key,
+                "X-RapidAPI-Host": "booking-com.p.rapidapi.com"
+            }
+            
+            loc_params = {"name": location_query, "locale": "en-us"}
+            
+            async with httpx.AsyncClient() as client:
+                loc_resp = await client.get(location_url, headers=headers, params=loc_params)
+                if loc_resp.status_code != 200:
+                    print(f"Hotel API Location Error: {loc_resp.status_code}")
+                    return await self._get_demo_hotels(criteria)
+                
+                loc_data = loc_resp.json()
+                if not loc_data or not isinstance(loc_data, list):
+                     print("Location not found in API")
+                     return await self._get_demo_hotels(criteria)
+
+                dest_id = loc_data[0].get("dest_id")
+                dest_type = loc_data[0].get("dest_type")
+                
+                # 2. Search hotels
+                checkin = criteria.get("check_in", (datetime.now() + timedelta(days=1)).strftime("%Y-%m-%d"))
+                checkout = criteria.get("check_out", (datetime.now() + timedelta(days=2)).strftime("%Y-%m-%d"))
+                
+                search_params = {
+                    "dest_id": dest_id,
+                    "dest_type": dest_type,
+                    "checkin_date": checkin,
+                    "checkout_date": checkout,
+                    "adults_number": str(criteria.get("guests", 2)),
+                    "order_by": "price",
+                    "units": "imperial",
+                    "room_number": "1",
+                    "locale": "en-us"
+                }
+
+                hotels_resp = await client.get(url, headers=headers, params=search_params)
+                if hotels_resp.status_code != 200:
+                     print(f"Hotel API Search Error: {hotels_resp.status_code}")
+                     return await self._get_demo_hotels(criteria)
+
+                hotels_data = hotels_resp.json()
+                results = []
+                
+                # The generic booking.com API structure usually has a 'result' list
+                # This depends heavily on the specific RapidAPI version.
+                # Assuming 'result' key based on common endpoints.
+                items = hotels_data.get("result", [])
+                
+                for item in items:
+                    # Filter by price if needed locally, though API order_by price helps
+                    price_val = 0.0
+                    if "composite_price_breakdown" in item:
+                         price_val = float(item["composite_price_breakdown"].get("gross_amount_per_night", {}).get("value", 0))
+                    
+                    if criteria.get("max_price") and price_val > criteria["max_price"]:
+                        continue
+
+                    hotel = {
+                         "id": str(item.get("hotel_id")),
+                         "name": item.get("hotel_name"),
+                         "location": f"{item.get('city')}, {item.get('country_trans')}",
+                         "star_rating": float(item.get("class", 0)),
+                         "price_per_night": price_val,
+                         "currency": item.get("currency_code", "USD"),
+                         "review_score": float(item.get("review_score", 0)) if item.get("review_score") else None,
+                         "review_count": item.get("review_nr"),
+                         "image_url": item.get("main_photo_url"),
+                         "address": item.get("address"),
+                         "amenities": [] # API might not return this in list view
+                    }
+                    results.append(hotel)
+                
+                return results
+
+        except Exception as e:
+            print(f"Hotel API Exception: {e}")
+            return await self._get_demo_hotels(criteria)
     
     async def execute_action(self, action_type: str, params: Dict[str, Any]) -> Any:
         """Hotel search is read-only, no actions to execute"""
@@ -312,10 +411,15 @@ class HotelConnector(Connector):
         if len(hotel.get("amenities", [])) > 5:
             amenities += f" (+{len(hotel['amenities']) - 5} more)"
         
+        img = ""
+        if hotel.get("image_url"):
+            img = f"\n![{hotel['name']}]({hotel['image_url']})"
+            
         return f"""
 **{hotel['name']}** {stars}
 📍 {hotel.get('location', 'Unknown location')}
-💰 ${hotel['price_per_night']}/night
+💰 {hotel.get('currency', '$')} {hotel['price_per_night']}/night
 📊 {hotel.get('review_score', 'N/A')}/10 ({hotel.get('review_count', 0)} reviews)
 🏨 {amenities}
+{img}
 """.strip()

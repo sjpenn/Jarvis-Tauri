@@ -49,6 +49,8 @@ class JarvisUI:
         )
         self.message_list = ft.ListView(expand=True, spacing=5)
         self.email_list = ft.ListView(expand=True, spacing=5)
+        self.weather_info = ft.Column(spacing=2)
+        self.flight_list = ft.ListView(expand=True, spacing=5)
         
         self._setup_ui()
         
@@ -58,6 +60,8 @@ class JarvisUI:
         self.page.run_task(self._update_stats_loop)
         self.page.run_task(self._update_messages_loop)
         self.page.run_task(self._update_emails_loop)
+        self.page.run_task(self._update_weather_loop)
+        self.page.run_task(self._update_flight_loop)
     
     def _get_time(self):
         return datetime.datetime.now().strftime("%H:%M")
@@ -143,8 +147,19 @@ class JarvisUI:
                 ft.Divider(color="cyan900"),
                 ft.Text("EMAIL", size=10, color="cyan700"),
                 ft.Container(
-                    content=self.email_list,
                     expand=True,
+                ),
+                ft.Divider(color="cyan900"),
+                ft.Text("WEATHER", size=10, color="cyan700"),
+                ft.Container(
+                    content=self.weather_info,
+                    padding=5,
+                ),
+                ft.Divider(color="cyan900"),
+                ft.Text("FLIGHTS", size=10, color="cyan700"),
+                ft.Container(
+                    content=self.flight_list,
+                    height=100, # Fixed height for flights
                 ),
                 ft.Divider(color="cyan900"),
                 ft.Text("LOCATION", color="cyan", weight="bold"),
@@ -178,6 +193,10 @@ class JarvisUI:
     async def _update_stats_loop(self):
         """Periodic System Stats Update"""
         while self.is_monitoring:
+            if not self.page or not self.cpu_ring.page:
+                 await asyncio.sleep(1)
+                 continue
+                 
             try:
                 cpu = self.system_stats.get_cpu_info()
                 mem = self.system_stats.get_memory_info()
@@ -188,7 +207,7 @@ class JarvisUI:
                 self.batt_ring.update_value(batt['percent'] / 100.0)
                 
                 # Update location occasionally or just once
-                if self.loc_text.value == "Scanning...":
+                if self.loc_text.value == "Scanning..." and self.loc_text.page:
                     loc = await self.system_stats.get_location()
                     self.loc_text.value = loc
                     self.loc_text.update()
@@ -201,6 +220,10 @@ class JarvisUI:
     async def _update_messages_loop(self):
         """Periodic iMessage Sync"""
         while self.is_monitoring:
+            if not self.message_list.page:
+                 await asyncio.sleep(1)
+                 continue
+                 
             try:
                 msgs = self.imessage.get_recent_messages(limit=8)
                 self.message_list.controls.clear()
@@ -232,6 +255,10 @@ class JarvisUI:
     async def _update_emails_loop(self):
         """Periodic Email Sync"""
         while self.is_monitoring:
+            if not self.email_list.page:
+                await asyncio.sleep(1)
+                continue
+                
             try:
                 # Access Email Agent via coordinator
                 agent = None
@@ -285,6 +312,123 @@ class JarvisUI:
                 print(f"Email error: {e}")
             
             await asyncio.sleep(60) # Refresh every 60s
+
+
+    async def _update_weather_loop(self):
+        """Periodic Weather Update"""
+        while self.is_monitoring:
+            if not self.weather_info.page:
+                await asyncio.sleep(1)
+                continue
+
+            try:
+                agent = None
+                if self.orchestrator.agent_coordinator:
+                    agent = self.orchestrator.agent_coordinator.get_agent("weather")
+                
+                if agent:
+                    # Get current weather for default location
+                    # Using DC as default since we saw it in config
+                    results = await agent.search({"location": "Washington, DC", "type": "current"})
+                    
+                    self.weather_info.controls.clear()
+                    
+                    if results and "error" not in results[0]:
+                        for res in results:
+                            if res.get("type") == "current":
+                                data = res.get("data", {})
+                                temp = data.get("temperature", "N/A")
+                                condition = data.get("description", "Unknown")
+                                icon = "☀️" # Simple mapping could be improved
+                                if "cloud" in condition.lower(): icon = "☁️"
+                                if "rain" in condition.lower(): icon = "🌧️"
+                                if "snow" in condition.lower(): icon = "❄️"
+                                
+                                self.weather_info.controls.extend([
+                                    ft.Row([
+                                        ft.Text(f"{icon} {temp}°F", size=20, weight="bold", color="cyan"),
+                                        ft.Text(condition.title(), size=12, color="cyan100")
+                                    ], alignment="spaceBetween"),
+                                    ft.Row([
+                                        ft.Text(f"Wind: {data.get('wind_speed', 0)} mph", size=10, color="cyan200"),
+                                        ft.Text(f"Hum: {data.get('humidity', 0)}%", size=10, color="cyan200"),
+                                    ], alignment="spaceBetween")
+                                ])
+                    else:
+                        self.weather_info.controls.append(ft.Text("Weather unavailable", color="grey", size=10))
+                        
+                    self.weather_info.update()
+                    
+            except Exception as e:
+                print(f"Weather error: {e}")
+                
+            await asyncio.sleep(300) # Refresh every 5 mins
+
+    async def _update_flight_loop(self):
+        """Periodic Flight Status Update"""
+        while self.is_monitoring:
+            if not self.flight_list.page:
+                await asyncio.sleep(1)
+                continue
+
+            try:
+                agent = None
+                if self.orchestrator.agent_coordinator:
+                    agent = self.orchestrator.agent_coordinator.get_agent("flight")
+                
+                if agent:
+                    # Use OpenSky for live radar
+                    # Default to DC if no location
+                    lat, lon = 38.9072, -77.0369
+                    
+                    # Try to get system location
+                    # Note: SystemStats location returns a string "City, Country", so we stick to config/default for now
+                    # Ideally we'd parse that or get coordinates from config
+                    
+                    # Get flights
+                    flights = await agent.search_traffic(lat, lon, radius=300)
+                    
+                    # Update Radar Widget if we had one, but we are using flight_list for now
+                    # Let's upgrade flight_list to be a text radar or list
+                    
+                    self.flight_list.controls.clear()
+                    
+                    if not flights:
+                        self.flight_list.controls.append(ft.Text("No active flights in range", size=10, color="grey"))
+                    else:
+                        # Show count
+                        self.flight_list.controls.append(ft.Text(f"Radar Contact: {len(flights)} aircraft", size=11, color="green", weight="bold"))
+                        
+                        # Show top 5 closest or just list them
+                        for f in flights[:10]: # Limit to 10
+                            icon = "✈️"
+                            # Rotate icon based on heading (approximate with arrows if emoji rotation not supported)
+                            # Emoji rotation isn't standard, so we use arrows for direction text
+                            dirs = ["⬆️", "↗️", "➡️", "↘️", "⬇️", "↙️", "⬅️", "↖️"]
+                            heading = f.get("heading", 0)
+                            dir_idx = int((heading + 22.5) / 45) % 8
+                            dir_icon = dirs[dir_idx]
+                            
+                            self.flight_list.controls.append(
+                                ft.Container(
+                                    content=ft.Column([
+                                        ft.Row([
+                                            ft.Text(f"{icon} {f.get('callsign', 'Unknown')}", weight="bold", size=11, color="cyan50"),
+                                            ft.Text(f"{dir_icon} {int(f.get('altitude', 0))}m", size=10, color="cyan200")
+                                        ], alignment="spaceBetween"),
+                                        ft.Text(f"{f.get('airline', 'Unknown Airline')}", size=10, color="cyan400", no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS)
+                                    ], spacing=0),
+                                    padding=ft.padding.only(bottom=5),
+                                    border=ft.border.only(bottom=ft.BorderSide(1, "cyan900"))
+                                )
+                            )
+                    
+                    self.flight_list.update()
+                    
+            except Exception as e:
+                print(f"Flight error: {e}")
+                
+            await asyncio.sleep(15) # Refresh radar every 15s
 
 
     async def _handle_submit(self, e):

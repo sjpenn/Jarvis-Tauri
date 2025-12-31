@@ -139,9 +139,17 @@ class FlightAgent(Agent):
             params=intent,
         )
     
-    async def execute(self, action: DraftAction) -> str:
-        """Flight agent actions are informational"""
-        return "Flight information retrieved"
+    async def execute(self, action: str, **kwargs) -> Any:
+        # Pass through to connector
+        if self._connectors:
+            return await self._connectors[0].execute_action(action, kwargs)
+        return {"error": "No connector configured"}
+        
+    async def search_traffic(self, lat: float, lon: float, radius: int = 300) -> List[Dict[str, Any]]:
+        """Get live traffic from connector"""
+        if self._connectors and hasattr(self._connectors[0], "search_traffic"):
+            return await self._connectors[0].search_traffic(lat, lon, radius)
+        return []
     
     def get_capabilities(self) -> List[str]:
         return [

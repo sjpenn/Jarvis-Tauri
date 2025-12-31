@@ -82,9 +82,11 @@ class FlightConnector(Connector):
             return False
         
         if not self._api_key:
-            print("AviationStack API key not configured")
-            print("Get free key at: https://aviationstack.com/")
-            return False
+            print("AviationStack API key not configured - Status API disabled")
+            print("Enabling OpenSky Network (Radar) only.")
+            # Still initialize client for OpenSky
+            self._client = httpx.AsyncClient(timeout=15.0)
+            return True
         
         # Create client
         self._client = httpx.AsyncClient(timeout=15.0)
@@ -280,8 +282,28 @@ class FlightConnector(Connector):
         
         return display
     
-    def _get_city_from_airport(self, airport_iata: str) -> str:
+    async def _get_city_from_airport(self, airport_iata: str) -> str:
         """Get city name from airport IATA code"""
+        if not airport_iata:
+            return ""
+            
+        # Try Data Manager first
+        if not hasattr(self, "_data_manager"):
+            from jarvis.agents.utils.flight_data_manager import FlightDataManager
+            self._data_manager = FlightDataManager()
+            # We can't await here easily if called from synchronous context, 
+            # but usually this is called from async _get_flight_status.
+            # However, _get_city_from_airport is defined as sync in original code? 
+            # Ah, wait, checking original signature... `def _get_city_from_airport(self, airport_iata: str) -> str:`
+            # It's synchronous. We should make it async or rely on pre-loaded data.
+            # For safety, let's keep the hardcoded backup and try to use data if loaded.
+            pass
+            
+        if hasattr(self, "_data_manager") and self._data_manager._loaded:
+            info = self._data_manager.get_airport_info(airport_iata)
+            if info:
+                return info.get("city", "")
+
         # Common airport codes - expand as needed
         airport_cities = {
             "JFK": "New York",
@@ -352,3 +374,100 @@ class FlightConnector(Connector):
             parts.append(f"  Scheduled Arrival: {arr['scheduled']}")
         
         return "\n".join(parts)
+
+    async def search_traffic(
+        self, 
+        lat: float, 
+        lon: float, 
+        radius_miles: int = 300
+    ) -> List[Dict[str, Any]]:
+        """
+        Get live air traffic within radius using OpenSky Network.
+        No API key required for anonymous access (lower rate limits).
+        """
+        if not self._client:
+            return []
+            
+        # bbox = min_lat, min_lon, max_lat, max_lon
+        # Approx: 1 deg lat = 69 miles, 1 deg lon = ~53 miles (at 40 deg lat)
+        lat_deg = radius_miles / 69.0
+        lon_deg = radius_miles / 53.0
+        
+        bbox = (
+            lat - lat_deg,      # lamin
+            lon - lon_deg,      # lomin
+            lat + lat_deg,      # lamax
+            lon + lon_deg       # lomax
+        )
+        
+        url = "https://opensky-network.org/api/states/all"
+        params = {
+            "lamin": bbox[0],
+            "lomin": bbox[1],
+            "lamax": bbox[2],
+            "lomax": bbox[3]
+        }
+        
+        try:
+            # Anonymous access doesn't need auth headers, but let's be polite
+            response = await self._client.get(url, params=params)
+            
+            if response.status_code != 200:
+                print(f"OpenSky API error: {response.status_code}")
+                return []
+            
+            data = response.json()
+            states = data.get("states", [])
+            
+            if not states:
+                return []
+            
+            # Lazily load OpenFlights data if not already
+            if not hasattr(self, "_data_manager"):
+                from jarvis.agents.utils.flight_data_manager import FlightDataManager
+                self._data_manager = FlightDataManager()
+                await self._data_manager.load_data()
+                
+            results = []
+            for s in states:
+                # State vector format: https://openskynetwork.github.io/opensky-api/rest.html
+                # 0: icao24 (id)
+                # 1: callsign
+                # 2: origin_country
+                # 5: longitude
+                # 6: latitude
+                # 7: baro_altitude
+                # 10: heading
+                
+                # Filter out null positions
+                if not s[5] or not s[6]:
+                    continue
+                
+                callsign = s[1].strip()
+                airline_name = "Unknown Airline"
+                
+                # Try to resolve airline name from callsign (first 3 chars usually ICAO)
+                if len(callsign) >= 3:
+                     airline_icao = callsign[:3]
+                     resolved_name = self._data_manager.get_airline_name(airline_icao)
+                     if resolved_name:
+                         airline_name = resolved_name
+                    
+                aircraft = {
+                    "id": s[0],
+                    "callsign": callsign,
+                    "airline": airline_name, 
+                    "country": s[2],
+                    "lon": s[5],
+                    "lat": s[6],
+                    "altitude": s[7],
+                    "heading": s[10],
+                }
+                results.append(aircraft)
+                
+            return results
+            
+        except Exception as e:
+            print(f"OpenSky error: {e}")
+            return []
+

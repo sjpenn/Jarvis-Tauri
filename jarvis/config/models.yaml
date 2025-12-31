@@ -134,9 +134,11 @@ agents:
     enabled: true
     provider: aviationstack
     api_key: "517f4d00ed5b6bc89962c1c8db215fbe"
+    radius: 300  # Scan radius in miles
   
   # Trip Planning Agent - Hotel search and cost planning
   trip:
     enabled: true
     hotel_provider: demo  # Uses demo data until real API configured
-    api_key: ""  # Optional: Configure for real hotel API
+    api_key: ""  # Hotel API key given by user? No, keeping empty for now as placeholder
+    rapidapi_key: "" # Add this for Booking.com via RapidAPI
