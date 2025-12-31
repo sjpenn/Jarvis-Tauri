@@ -52,7 +52,7 @@ agents:
     # Gmail accounts - download credentials from Google Cloud Console
     gmail_accounts:
       - name: personal
-        credentials_file: ~/.jarvis/gmail_personal_credentials.json
+        credentials_file: ~/.jarvis/gmail_credentials.json
     
     # Outlook accounts - register app in Azure Portal
     outlook_accounts:

@@ -48,13 +48,16 @@ class JarvisUI:
             on_submit=self._handle_submit,
         )
         self.message_list = ft.ListView(expand=True, spacing=5)
+        self.email_list = ft.ListView(expand=True, spacing=5)
         
         self._setup_ui()
         
 
         # Start background tasks
         self.page.run_task(self._update_stats_loop)
+        self.page.run_task(self._update_stats_loop)
         self.page.run_task(self._update_messages_loop)
+        self.page.run_task(self._update_emails_loop)
     
     def _get_time(self):
         return datetime.datetime.now().strftime("%H:%M")
@@ -67,8 +70,7 @@ class JarvisUI:
         self.page.theme_mode = "dark"
         self.page.padding = 10
         self.page.bgcolor = "#050A10" # Deep dark blue
-        self.page.window_width = 1200
-        self.page.window_height = 800
+        self.page.window_maximized = True
         
 
         # --- Left Panel: System Stats ---
@@ -118,8 +120,8 @@ class JarvisUI:
                 ),
                 ft.Row([
                     self.input_field,
-                    ft.IconButton(icon=ft.icons.MIC, icon_color="cyan", on_click=self._toggle_mic),
-                    ft.IconButton(icon=ft.icons.SEND, icon_color="cyan", on_click=self._handle_submit),
+                    ft.IconButton(icon=ft.Icons.MIC, icon_color="cyan", on_click=self._toggle_mic),
+                    ft.IconButton(icon=ft.Icons.SEND, icon_color="cyan", on_click=self._handle_submit),
                 ])
             ]),
             expand=True,
@@ -140,12 +142,9 @@ class JarvisUI:
                 ),
                 ft.Divider(color="cyan900"),
                 ft.Text("EMAIL", size=10, color="cyan700"),
-                 ft.Container(
-                    content=ft.Column([
-                        ft.Row([ft.Icon(ft.icons.EMAIL, color="cyan", size=16), ft.Text("No new emails", color="cyan200", size=12)]),
-                        ft.Text("Inbox: Empty", color="cyan700", size=10)
-                    ]),
-                    padding=5
+                ft.Container(
+                    content=self.email_list,
+                    expand=True,
                 ),
                 ft.Divider(color="cyan900"),
                 ft.Text("LOCATION", color="cyan", weight="bold"),
@@ -167,7 +166,7 @@ class JarvisUI:
     
     def _build_agent_status(self, name: str, active: bool):
         return ft.Row([
-            ft.Icon(ft.icons.CIRCLE, size=10, color="green" if active else "red"),
+            ft.Icon(ft.Icons.CIRCLE, size=10, color="green" if active else "red"),
             ft.Text(name, color="cyan100")
         ])
         
@@ -230,6 +229,64 @@ class JarvisUI:
             
             await asyncio.sleep(5) # Refresh every 5s
 
+    async def _update_emails_loop(self):
+        """Periodic Email Sync"""
+        while self.is_monitoring:
+            try:
+                # Access Email Agent via coordinator
+                agent = None
+                if self.orchestrator.agent_coordinator:
+                    agent = self.orchestrator.agent_coordinator.get_agent("email")
+                
+                if agent:
+                    # Search recent emails
+                    emails = await agent.search({"limit": 5, "accounts": "all"})
+                    
+                    self.email_list.controls.clear()
+                    
+                    if not emails:
+                         self.email_list.controls.append(
+                            ft.Container(
+                                content=ft.Column([
+                                    ft.Row([ft.Icon(ft.Icons.EMAIL, color="cyan", size=16), ft.Text("No new emails", color="cyan200", size=12)]),
+                                    ft.Text("Inbox: Empty", color="cyan700", size=10)
+                                ]),
+                                padding=5
+                            )
+                         )
+                    else:
+                        for email in emails:
+                            # Handle both object and dict (just in case)
+                            subject = getattr(email, "subject", email.get("subject", "No Subject")) if hasattr(email, "subject") else email.get("subject", "No Subject")
+                            sender = getattr(email, "sender", email.get("sender", "Unknown")) if hasattr(email, "sender") else email.get("sender", "Unknown")
+                            body = getattr(email, "body", email.get("body", "")) if hasattr(email, "body") else email.get("body", "")
+                            
+                            self.email_list.controls.append(
+                                ft.Container(
+                                    content=ft.Column([
+                                        ft.Row([
+                                            ft.Text(sender[:15], weight="bold", size=11, color="cyan100", no_wrap=True),
+                                            ft.Text(subject[:20], size=10, color="cyan200", no_wrap=True)
+                                        ], alignment="spaceBetween"),
+                                        ft.Text(body, size=10, color="cyan50", no_wrap=True, overflow=ft.TextOverflow.ELLIPSIS, max_lines=1)
+                                    ]),
+                                    padding=5,
+                                    border=ft.border.only(bottom=ft.BorderSide(1, "cyan900"))
+                                )
+                            )
+                    self.email_list.update()
+                else:
+                    # Agent not loaded
+                    self.email_list.controls.clear()
+                    self.email_list.controls.append(ft.Text("Email agent disabled", color="grey", size=10))
+                    self.email_list.update()
+                    
+            except Exception as e:
+                print(f"Email error: {e}")
+            
+            await asyncio.sleep(60) # Refresh every 60s
+
+
     async def _handle_submit(self, e):
         text = self.input_field.value
         if not text:
@@ -276,8 +333,96 @@ class JarvisUI:
         )
         self.chat_list.update()
 
-    def _toggle_mic(self, e):
-        pass
+    async def _toggle_mic(self, e):
+        """Toggle microphone recording"""
+        if hasattr(self, 'is_recording') and self.is_recording:
+            # Stop recording
+            self.is_recording = False
+            self.orb.set_state("THINKING")
+            self.page.update()
+            return
+
+        # Start recording
+        self.is_recording = True
+        self.orb.set_state("LISTENING")
+        self.page.update()
+        
+        # Run recording in background
+        self.page.run_task(self._record_and_process)
+        
+    async def _record_and_process(self):
+        """Record audio and send to orchestrator"""
+        import pyaudio
+        import wave
+        import tempfile
+        import os
+        
+        CHUNK = 1024
+        FORMAT = pyaudio.paInt16
+        CHANNELS = 1
+        RATE = 16000
+        
+        p = pyaudio.PyAudio()
+        stream = p.open(format=FORMAT,
+                        channels=CHANNELS,
+                        rate=RATE,
+                        input=True,
+                        frames_per_buffer=CHUNK)
+        
+        frames = []
+        
+        # Record while flag is true
+        while getattr(self, 'is_recording', False):
+            try:
+                data = stream.read(CHUNK, exception_on_overflow=False)
+                frames.append(data)
+                await asyncio.sleep(0.01)
+            except Exception as e:
+                print(f"Recording error: {e}")
+                break
+        
+        stream.stop_stream()
+        stream.close()
+        p.terminate()
+        
+        if not frames:
+            self.orb.set_state("IDLE")
+            self.page.update()
+            return
+
+        # Save to temp file
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".wav") as tmp_wav:
+            wf = wave.open(tmp_wav.name, 'wb')
+            wf.setnchannels(CHANNELS)
+            wf.setsampwidth(p.get_sample_size(FORMAT))
+            wf.setframerate(RATE)
+            wf.writeframes(b''.join(frames))
+            wf.close()
+            filename = tmp_wav.name
+        
+        # Process
+        try:
+            # Add user message placeholder
+            await self._add_message("🎤 [Voice Command]", is_user=True)
+            
+            self.orb.set_state("THINKING")
+            self.page.update()
+            
+            # Send to orchestrator
+            response = await self.orchestrator.process_voice(Path(filename))
+            
+            self.orb.set_state("SPEAKING")
+            self.page.update()
+            
+            await self._add_message(response, is_user=False)
+            
+        except Exception as e:
+            await self._add_message(f"Error: {e}", is_user=False)
+        finally:
+            self.orb.set_state("IDLE")
+            self.page.update()
+            if os.path.exists(filename):
+                os.unlink(filename)
 
 async def main_async(page: ft.Page, config_path: Optional[Path] = None):
     orchestrator = JARVISOrchestrator(config_path)

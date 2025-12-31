@@ -14,8 +14,8 @@ class Orb(ft.Container):
                 colors=["cyan100", "cyan700", "transparent"],
                 stops=[0.1, 0.6, 1.0],
             ),
-            animate_scale=ft.animation.Animation(1000, ft.AnimationCurve.EASE_IN_OUT),
-            animate_opacity=ft.animation.Animation(500, ft.AnimationCurve.EASE_IN_OUT),
+            animate_scale=ft.Animation(1000, ft.AnimationCurve.EASE_IN_OUT),
+            animate_opacity=ft.Animation(500, ft.AnimationCurve.EASE_IN_OUT),
         )
         self.content = self.orb_container
         self.alignment = ft.alignment.center

@@ -1,7 +1,8 @@
 """Configuration system for JARVIS using Pydantic Settings"""
 
 from pathlib import Path
-from typing import Literal, Optional
+from typing import Any, Dict, List, Literal, Optional
+
 from pydantic import BaseModel, Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 import yaml
@@ -64,6 +65,50 @@ class MemoryConfig(BaseModel):
 
 
 
+
+class GmailAccount(BaseModel):
+    name: str
+    credentials_file: str
+
+class OutlookAccount(BaseModel):
+    name: str
+    client_id: str
+
+class EmailAgentConfig(BaseModel):
+    enabled: bool = True
+    gmail_accounts: List[GmailAccount] = Field(default_factory=list)
+    outlook_accounts: List[OutlookAccount] = Field(default_factory=list)
+
+class TransportAgentConfig(BaseModel):
+    enabled: bool = True
+    locations: Dict[str, Any] = Field(default_factory=dict)
+    providers: List[Any] = Field(default_factory=list)
+
+class WeatherAgentConfig(BaseModel):
+    enabled: bool = True
+    provider: str = "weather.gov"
+    default_location: str = "Washington, DC"
+    units: str = "imperial"
+
+class FlightAgentConfig(BaseModel):
+    enabled: bool = True
+    provider: str = "aviationstack"
+    api_key: str = ""
+
+class TripAgentConfig(BaseModel):
+    enabled: bool = True
+    hotel_provider: str = "demo"
+    api_key: str = ""
+
+class AgentsConfig(BaseModel):
+    email: EmailAgentConfig = Field(default_factory=EmailAgentConfig)
+    transport: TransportAgentConfig = Field(default_factory=TransportAgentConfig)
+    weather: WeatherAgentConfig = Field(default_factory=WeatherAgentConfig)
+    flight: FlightAgentConfig = Field(default_factory=FlightAgentConfig)
+    trip: TripAgentConfig = Field(default_factory=TripAgentConfig)
+    calendar: Dict[str, Any] = Field(default_factory=dict)
+
+
 class Settings(BaseSettings):
     """Main JARVIS settings loaded from environment and config files"""
     
@@ -74,7 +119,7 @@ class Settings(BaseSettings):
     )
     
     # API Keys from environment
-    ollama_host: str = "http://localhost:11434"
+    ollama_host: str = "http://127.0.0.1:11434"
     elevenlabs_api_key: Optional[str] = None
     porcupine_access_key: Optional[str] = None
     perplexity_api_key: Optional[str] = None
@@ -89,6 +134,7 @@ class Settings(BaseSettings):
     vision: VisionConfig = Field(default_factory=VisionConfig)
     integrations: IntegrationsConfig = Field(default_factory=IntegrationsConfig)
     memory: MemoryConfig = Field(default_factory=MemoryConfig)
+    agents: AgentsConfig = Field(default_factory=AgentsConfig)
 
 
 def load_config(config_path: Optional[Path] = None) -> Settings:
@@ -115,5 +161,7 @@ def load_config(config_path: Optional[Path] = None) -> Settings:
                 settings.integrations = IntegrationsConfig(**yaml_config["integrations"])
             if "memory" in yaml_config:
                 settings.memory = MemoryConfig(**yaml_config["memory"])
+            if "agents" in yaml_config:
+                settings.agents = AgentsConfig(**yaml_config["agents"])
     
     return settings

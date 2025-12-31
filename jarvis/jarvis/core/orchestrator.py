@@ -12,6 +12,7 @@ from jarvis.core.stt_engine import STTEngine
 from jarvis.core.tts_engine import TTSEngine
 from jarvis.core.vision_engine import VisionEngine
 from jarvis.integrations.base import Integration
+from jarvis.agents.connectors.connector_base import ConnectorConfig
 
 
 class JARVISOrchestrator:
@@ -152,7 +153,7 @@ class JARVISOrchestrator:
         # Get memory store if available
         memory_store = None
         if self.memory_integration:
-            memory_store = self.memory_integration.memory_store
+            memory_store = self.memory_integration.memory
         
         # Create coordinator
         self.agent_coordinator = AgentCoordinator(memory_store)
@@ -162,16 +163,20 @@ class JARVISOrchestrator:
             email_agent = EmailAgent()
             
             # Add Gmail connectors
-            gmail_accounts = getattr(self.settings, 'gmail_accounts', [])
+            # Add Gmail connectors
+            gmail_accounts = []
+            if getattr(self.settings, 'agents', None) and getattr(self.settings.agents, 'email', None):
+                 gmail_accounts = self.settings.agents.email.gmail_accounts
+            
             if gmail_accounts:
                 from jarvis.agents.connectors.gmail_connector import GmailConnector
-                from jarvis.agents.connectors.connector_base import ConnectorConfig
+
                 
                 for acct in gmail_accounts:
                     config = ConnectorConfig(
-                        name=acct.get('name', 'default'),
+                        name=acct.name,
                         connector_type='gmail',
-                        credentials_path=acct.get('credentials_file'),
+                        credentials_path=acct.credentials_file,
                     )
                     email_agent.register_connector(GmailConnector(config))
             
@@ -179,7 +184,7 @@ class JARVISOrchestrator:
             outlook_accounts = getattr(self.settings, 'outlook_accounts', [])
             if outlook_accounts:
                 from jarvis.agents.connectors.outlook_connector import OutlookConnector
-                from jarvis.agents.connectors.connector_base import ConnectorConfig
+
                 
                 for acct in outlook_accounts:
                     config = ConnectorConfig(
@@ -233,9 +238,8 @@ class JARVISOrchestrator:
             
             # Add transport connectors based on config
             if providers:
-                from jarvis.agents.connectors.connector_base import ConnectorConfig
-                
                 for prov in providers:
+
                     prov_name = prov.get('name', '') if isinstance(prov, dict) else getattr(prov, 'name', '')
                     prov_enabled = prov.get('enabled', False) if isinstance(prov, dict) else getattr(prov, 'enabled', False)
                     

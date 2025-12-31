@@ -1,21 +1,63 @@
 """
 iMessage Integration
 Reads local macOS Messages database to retrieve recent chats.
+Sends messages using AppleScript.
 Requires Full Disk Access for the terminal/app running this code.
 """
 
 import sqlite3
 import os
+import asyncio
 from pathlib import Path
 from typing import List, Dict, Any
 from datetime import datetime
 
-class IMessageIntegration:
+from jarvis.core.llm_engine import Tool
+from jarvis.integrations.base import Integration
+
+class IMessageIntegration(Integration):
     def __init__(self, db_path: str = None):
         if db_path:
             self.db_path = Path(db_path)
         else:
             self.db_path = Path(os.path.expanduser("~/Library/Messages/chat.db"))
+
+    @property
+    def name(self) -> str:
+        return "imessage"
+
+    @property
+    def description(self) -> str:
+        return "Read and send iMessages"
+
+    @property
+    def tools(self) -> List[Tool]:
+        return [
+            Tool(
+                name="get_recent_messages",
+                description="Get recent iMessages",
+                parameters={
+                    "limit": {
+                        "type": "integer",
+                        "description": "Number of messages to retrieve (default 10)"
+                    }
+                }
+            ),
+            Tool(
+                name="send_message",
+                description="Send an iMessage to a recipient",
+                parameters={
+                    "recipient": {
+                        "type": "string",
+                        "description": "Phone number or email address of the recipient"
+                    },
+                    "message": {
+                        "type": "string",
+                        "description": "The message content to send"
+                    }
+                }
+            )
+        ]
 
     def check_permissions(self) -> bool:
         """Check if we can read the database"""
@@ -31,8 +73,6 @@ class IMessageIntegration:
             cursor = conn.cursor()
 
             # Query to get messages joined with handles (senders)
-            # Timestamps in iMessage are usually Core Data timestamps (mac absolute time), 
-            # starting from Jan 1 2001.
             query = """
                 SELECT 
                     message.text,
@@ -52,11 +92,6 @@ class IMessageIntegration:
             messages = []
             for row in rows:
                 text, sender, date_val, is_from_me = row
-                
-                # Convert Mac Absolute Time (ns or seconds) to readable
-                # Usually in nanoseconds since 2001-01-01
-                # If number is huge (>1e10), likely nanoseconds.
-                # 2001-01-01 timestamp is 978307200 in Unix epoch
                 
                 try:
                     # Assuming nanoseconds based on recent macOS versions
@@ -82,3 +117,47 @@ class IMessageIntegration:
             return [{"error": f"Database error: {e}"}]
         except Exception as e:
             return [{"error": f"Error reading messages: {e}"}]
+
+    async def execute(self, tool_name: str, params: dict) -> Any:
+        """Execute iMessage tool"""
+        if tool_name == "get_recent_messages":
+            limit = params.get("limit", 10)
+            return self.get_recent_messages(limit)
+        elif tool_name == "send_message":
+            recipient = params.get("recipient")
+            message = params.get("message")
+            return await self.send_message(recipient, message)
+        return f"Unknown tool: {tool_name}"
+
+    async def send_message(self, recipient: str, message: str) -> str:
+        """Send an iMessage using AppleScript"""
+        script = f'''
+        tell application "Messages"
+            set targetService to 1st service whose service type = iMessage
+            set targetBuddy to buddy "{recipient}" of targetService
+            send "{message}" to targetBuddy
+        end tell
+        '''
+        
+        try:
+            result = await self._run_applescript(script)
+            return f"Message sent to {recipient}"
+        except Exception as e:
+            return f"Failed to send message: {e}"
+
+    async def _run_applescript(self, script: str) -> str:
+        """Run AppleScript and return result"""
+        proc = await asyncio.create_subprocess_exec(
+            "/usr/bin/osascript", "-e", script,
+            stdout=asyncio.subprocess.PIPE,
+            stderr=asyncio.subprocess.PIPE,
+        )
+        stdout, stderr = await proc.communicate()
+        
+        if proc.returncode != 0:
+            raise Exception(stderr.decode())
+        
+        return stdout.decode().strip()
+
+    async def health_check(self) -> bool:
+        return self.check_permissions()
