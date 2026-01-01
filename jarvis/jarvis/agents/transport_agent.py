@@ -20,6 +20,7 @@ from typing import Any, Dict, List, Optional, Set
 
 from jarvis.agents.agent_base import Agent, DraftAction
 from jarvis.agents.connectors.connector_base import Connector
+from jarvis.agents.connectors.maps_connector import MapsConnector
 
 
 class TransportMode(Enum):
@@ -506,3 +507,24 @@ class TransportAgent(Agent):
                 results[mode] = departures
         
         return results
+
+    async def get_travel_estimate(self, start: str, end: str, mode: TransportMode = TransportMode.RIDESHARE) -> Dict[str, Any]:
+        """
+        Get travel time estimate between two points.
+        Uses MapsConnector if available, or falls back to basic estimation.
+        """
+        # Try to find a maps connector
+        maps_connector = None
+        for conn in self._connectors:
+             if isinstance(conn, MapsConnector):
+                 maps_connector = conn
+                 break
+        
+        if not maps_connector:
+            # Fallback: Just return a link
+            return {
+                "status": "link_only",
+                "maps_url": f"http://maps.apple.com/?saddr={start.replace(' ', '+')}&daddr={end.replace(' ', '+')}"
+            }
+            
+        return await maps_connector.get_travel_time(start, end, "transit" if mode in [TransportMode.METRO, TransportMode.BUS, TransportMode.COMMUTER_RAIL] else "driving")

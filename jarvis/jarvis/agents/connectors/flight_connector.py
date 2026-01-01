@@ -25,6 +25,9 @@ try:
 except ImportError:
     HTTPX_AVAILABLE = False
 
+import time
+from datetime import datetime, timedelta
+
 
 # AviationStack API endpoints
 AVIATION_BASE_URL = "http://api.aviationstack.com/v1"
@@ -70,6 +73,11 @@ class FlightConnector(Connector):
         super().__init__(config)
         self._api_key = config.api_key
         self._client: Optional[httpx.AsyncClient] = None
+        # Rate limiting state
+        self._rate_limited_until: Optional[datetime] = None
+        self._backoff_seconds = 60  # Start with 60 second backoff
+        self._last_error_message = None
+        self._error_count = 0
     
     @property
     def connector_type(self) -> str:
@@ -387,6 +395,11 @@ class FlightConnector(Connector):
         """
         if not self._client:
             return []
+        
+        # Check if we're rate limited
+        if self._rate_limited_until and datetime.now() < self._rate_limited_until:
+            # Silently skip this call while rate limited
+            return []
             
         # bbox = min_lat, min_lon, max_lat, max_lon
         # Approx: 1 deg lat = 69 miles, 1 deg lon = ~53 miles (at 40 deg lat)
@@ -410,11 +423,33 @@ class FlightConnector(Connector):
         
         try:
             # Anonymous access doesn't need auth headers, but let's be polite
-            response = await self._client.get(url, params=params)
+            response = await self._client.get(url, params=params, timeout=10.0)
+            
+            if response.status_code == 429:
+                # Rate limited - implement exponential backoff
+                self._rate_limited_until = datetime.now() + timedelta(seconds=self._backoff_seconds)
+                self._backoff_seconds = min(self._backoff_seconds * 2, 600)  # Max 10 min
+                
+                # Only print once
+                if self._last_error_message != "rate_limit":
+                    print(f"OpenSky rate limited. Backing off for {self._backoff_seconds}s")
+                    self._last_error_message = "rate_limit"
+                return []
             
             if response.status_code != 200:
-                print(f"OpenSky API error: {response.status_code}")
+                # Only print error if it's different or we haven't printed many
+                error_msg = f"OpenSky API error: {response.status_code}"
+                if self._last_error_message != error_msg or self._error_count < 3:
+                    print(error_msg)
+                    self._last_error_message = error_msg
+                    self._error_count += 1
                 return []
+            
+            # Success - reset backoff
+            self._backoff_seconds = 60
+            self._rate_limited_until = None
+            self._error_count = 0
+            self._last_error_message = None
             
             data = response.json()
             states = data.get("states", [])
@@ -460,14 +495,22 @@ class FlightConnector(Connector):
                     "country": s[2],
                     "lon": s[5],
                     "lat": s[6],
-                    "altitude": s[7],
-                    "heading": s[10],
+                    "altitude": s[7] or 0,
+                    "heading": s[10] or 0,
                 }
                 results.append(aircraft)
                 
             return results
             
         except Exception as e:
-            print(f"OpenSky error: {e}")
+            # Suppress repeated network errors
+            error_str = str(e)
+            if "nodename nor servname" in error_str or "connection" in error_str.lower():
+                if self._last_error_message != "network_error" or self._error_count < 2:
+                    print(f"OpenSky network error (will retry): {e}")
+                    self._last_error_message = "network_error"
+                    self._error_count += 1
+            else:
+                print(f"OpenSky error: {e}")
             return []
 

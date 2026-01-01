@@ -291,7 +291,20 @@ class JARVISOrchestrator:
                             name='marc',
                             connector_type='marc',
                         )
+                        config = ConnectorConfig(
+                            name='marc',
+                            connector_type='marc',
+                        )
                         transport_agent.register_connector(MARCConnector(config))
+
+                    elif prov_name == 'apple_maps' and prov_enabled:
+                         from jarvis.agents.connectors.maps_connector import MapsConnector
+                         
+                         config = ConnectorConfig(
+                             name='apple_maps',
+                             connector_type='maps',
+                         )
+                         transport_agent.register_connector(MapsConnector(config))
             
             self.agent_coordinator.register_agent(transport_agent)
         
@@ -566,9 +579,7 @@ Always respond naturally as if speaking out loud. Keep responses concise for voi
         
         Args:
             image_path: Path to image
-            prompt: User's question about the image
-            
-        Returns:
+            Returns:
             Analysis text
         """
         await self.initialize()
@@ -582,6 +593,7 @@ Always respond naturally as if speaking out loud. Keep responses concise for voi
         # Optional: Feed result to LLM for more conversational tone?
         # For now, just return the vision model's response directly
         return vision_response
+
 
     async def process_screen(self, prompt: str = "What is on the screen?") -> str:
         """Capture and analyze screen"""

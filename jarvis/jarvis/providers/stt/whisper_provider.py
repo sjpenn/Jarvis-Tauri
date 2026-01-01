@@ -70,29 +70,45 @@ class WhisperProvider(STTEngine):
     
     def _transcribe_sync(self, audio_path: str) -> TranscriptionResult:
         """Synchronous transcription"""
-        segments, info = self._model.transcribe(
-            audio_path,
-            language=self.language,
-            beam_size=5,
-            vad_filter=True,  # Filter out silence
-            vad_parameters=dict(
-                min_silence_duration_ms=500,
-            ),
-        )
+        # Check if file exists and has content
+        path = Path(audio_path)
+        if not path.exists() or path.stat().st_size < 100:  # < 100 bytes is likely invalid WAV header or empty
+            return TranscriptionResult(text="", language=self.language, confidence=0.0, duration_seconds=0.0)
+
+        import warnings
+        import logging
         
-        # Collect all segment text
-        text_parts = []
-        for segment in segments:
-            text_parts.append(segment.text.strip())
-        
-        full_text = " ".join(text_parts)
-        
-        return TranscriptionResult(
-            text=full_text,
-            language=info.language,
-            confidence=info.language_probability,
-            duration_seconds=info.duration,
-        )
+        # Suppress faster_whisper warnings about divide by zero (usually harmless for silence)
+        with warnings.catch_warnings():
+            warnings.filterwarnings("ignore", category=RuntimeWarning, module="faster_whisper")
+            
+            try:
+                segments, info = self._model.transcribe(
+                    audio_path,
+                    language=self.language,
+                    beam_size=5,
+                    vad_filter=True,  # Filter out silence
+                    vad_parameters=dict(
+                        min_silence_duration_ms=500,
+                    ),
+                )
+                
+                # Collect all segment text
+                text_parts = []
+                for segment in segments:
+                    text_parts.append(segment.text.strip())
+                
+                full_text = " ".join(text_parts)
+                
+                return TranscriptionResult(
+                    text=full_text,
+                    language=info.language,
+                    confidence=info.language_probability,
+                    duration_seconds=info.duration,
+                )
+            except Exception as e:
+                logging.error(f"Whisper transcription error: {e}")
+                return TranscriptionResult(text="", language=self.language, confidence=0.0, duration_seconds=0.0)
     
     async def transcribe_bytes(self, audio_bytes: bytes) -> TranscriptionResult:
         """Transcribe from raw audio bytes"""

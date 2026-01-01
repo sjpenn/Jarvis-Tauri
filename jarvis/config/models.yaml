@@ -120,6 +120,11 @@ agents:
         display_name: "DC Circulator"
         modes: [bus]
         enabled: false
+
+      - name: apple_maps
+        display_name: "Apple Maps"
+        modes: [rideshare] # Used for general routing
+        enabled: true
   
   # Weather Agent - Get forecasts and packing suggestions
   # Uses FREE NOAA Weather.gov API - No API key needed!
@@ -142,3 +147,4 @@ agents:
     hotel_provider: demo  # Uses demo data until real API configured
     api_key: ""  # Hotel API key given by user? No, keeping empty for now as placeholder
     rapidapi_key: "" # Add this for Booking.com via RapidAPI
+

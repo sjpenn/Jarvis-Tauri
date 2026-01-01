@@ -276,4 +276,19 @@ class CalendarAgent(Agent):
             "search for specific events",
             "create new events (draft mode)",
             "aggregate events from multiple calendars",
+            "get next meeting details",
         ]
+
+    async def get_next_event(self) -> str | CalendarEvent:
+        """Get the single next upcoming event"""
+        events = await self.search({"hours": 48, "limit": 1})
+        
+        now = datetime.now()
+        upcoming = [e for e in events if e.start > now]
+        
+        if not upcoming:
+            return "No upcoming events found in the next 48 hours."
+            
+        upcoming.sort(key=lambda e: e.start)
+        return upcoming[0]
+

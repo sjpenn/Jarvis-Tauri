@@ -405,7 +405,7 @@ class JarvisUI:
                             # Rotate icon based on heading (approximate with arrows if emoji rotation not supported)
                             # Emoji rotation isn't standard, so we use arrows for direction text
                             dirs = ["⬆️", "↗️", "➡️", "↘️", "⬇️", "↙️", "⬅️", "↖️"]
-                            heading = f.get("heading", 0)
+                            heading = f.get("heading") or 0
                             dir_idx = int((heading + 22.5) / 45) % 8
                             dir_icon = dirs[dir_idx]
                             
@@ -428,7 +428,7 @@ class JarvisUI:
             except Exception as e:
                 print(f"Flight error: {e}")
                 
-            await asyncio.sleep(15) # Refresh radar every 15s
+            await asyncio.sleep(60) # Refresh radar every 60s (reduced from 15s to avoid rate limiting)
 
 
     async def _handle_submit(self, e):
