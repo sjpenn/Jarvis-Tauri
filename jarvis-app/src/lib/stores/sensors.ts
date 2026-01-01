@@ -68,13 +68,34 @@ sensorData.subscribe(data => {
 export async function initSensorListeners() {
     try {
         const { listen } = await import('@tauri-apps/api/event');
-        
+        const { invoke } = await import('@tauri-apps/api/core');
+
         // Listen for sensor updates from Rust backend
         await listen<SensorData>('sensor:update', (event) => {
             sensorData.set(event.payload);
             isConnected.set(true);
         });
-        
+
+        // Fetch weather using geolocation (or default to DC)
+        try {
+            const position = await new Promise<GeolocationPosition>((resolve, reject) => {
+                navigator.geolocation.getCurrentPosition(resolve, reject, { timeout: 5000 });
+            });
+            const weatherData = await invoke<WeatherData>('get_weather', {
+                latitude: position.coords.latitude,
+                longitude: position.coords.longitude
+            });
+            weather.set(weatherData);
+        } catch (geoError) {
+            // Default to Washington DC if geolocation fails
+            console.log('Using default location for weather');
+            const weatherData = await invoke<WeatherData>('get_weather', {
+                latitude: 38.9072,
+                longitude: -77.0369
+            });
+            weather.set(weatherData);
+        }
+
         console.log('Sensor listeners initialized');
     } catch (error) {
         console.error('Failed to initialize sensor listeners:', error);

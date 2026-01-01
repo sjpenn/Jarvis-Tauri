@@ -126,25 +126,11 @@
                 </div>
             </div>
 
-            <div class="tools-section panel">
-                <div class="panel-header">AVAILABLE TOOLS</div>
-                <div class="panel-content">
-                    <div class="tool-item">
-                        <span class="tool-icon">🌤️</span>
-                        <span class="tool-name">Weather</span>
-                        <span class="status-dot active"></span>
-                    </div>
-                    <div class="tool-item">
-                        <span class="tool-icon">🚇</span>
-                        <span class="tool-name">Transit</span>
-                        <span class="status-dot active"></span>
-                    </div>
-                    <div class="tool-item">
-                        <span class="tool-icon">✈️</span>
-                        <span class="tool-name">Flights</span>
-                        <span class="status-dot active"></span>
-                    </div>
-                </div>
+            <div class="tools-icons">
+                <div class="tool-icon-compact weather" title="Weather">🌤️</div>
+                <div class="tool-icon-compact transit" title="Transit">🚇</div>
+                <div class="tool-icon-compact flights" title="Flights">✈️</div>
+                <div class="tool-icon-compact memory" title="Memory">🧠</div>
             </div>
 
             <ModelSettings />
@@ -317,9 +303,48 @@
         font-size: 1.2rem;
     }
 
-    .tool-name {
-        flex: 1;
-        font-size: 0.8rem;
-        color: var(--text-secondary);
+    .tools-icons {
+        display: flex;
+        gap: var(--space-sm);
+        justify-content: center;
+        padding: var(--space-sm) 0;
+    }
+
+    .tool-icon-compact {
+        width: 36px;
+        height: 36px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        border-radius: 8px;
+        font-size: 1.2rem;
+        cursor: pointer;
+        transition: all 0.2s ease;
+        opacity: 0.7;
+    }
+
+    .tool-icon-compact:hover {
+        opacity: 1;
+        transform: scale(1.1);
+    }
+
+    .tool-icon-compact.weather {
+        background: linear-gradient(135deg, #f39c12, #e67e22);
+        box-shadow: 0 0 10px rgba(243, 156, 18, 0.3);
+    }
+
+    .tool-icon-compact.transit {
+        background: linear-gradient(135deg, #3498db, #2980b9);
+        box-shadow: 0 0 10px rgba(52, 152, 219, 0.3);
+    }
+
+    .tool-icon-compact.flights {
+        background: linear-gradient(135deg, #9b59b6, #8e44ad);
+        box-shadow: 0 0 10px rgba(155, 89, 182, 0.3);
+    }
+
+    .tool-icon-compact.memory {
+        background: linear-gradient(135deg, #00ff88, #00cc6a);
+        box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
     }
 </style>

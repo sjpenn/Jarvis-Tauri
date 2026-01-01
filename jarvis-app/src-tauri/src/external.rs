@@ -44,68 +44,48 @@ pub struct FlightInfo {
     pub longitude: f64,
 }
 
-/// Get weather data from weather.gov (free, no API key)
+/// Get weather data from Open-Meteo (free, no API key, global coverage)
 #[tauri::command]
 pub async fn get_weather(latitude: f64, longitude: f64) -> Result<WeatherData, String> {
-    // First, get the forecast office URL
-    let points_url = format!(
-        "https://api.weather.gov/points/{:.4},{:.4}",
+    let url = format!(
+        "https://api.open-meteo.com/v1/forecast?latitude={}&longitude={}&current=temperature_2m,relative_humidity_2m,weather_code,wind_speed_10m&temperature_unit=fahrenheit&wind_speed_unit=mph&timezone=auto",
         latitude, longitude
     );
 
     let client = reqwest::Client::new();
     
-    let points_resp: serde_json::Value = client
-        .get(&points_url)
-        .header("User-Agent", "JARVIS-App/1.0")
+    let resp: serde_json::Value = client
+        .get(&url)
         .send()
         .await
-        .map_err(|e| format!("Failed to fetch weather points: {}", e))?
+        .map_err(|e| format!("Failed to fetch weather: {}", e))?
         .json()
         .await
-        .map_err(|e| format!("Failed to parse points response: {}", e))?;
+        .map_err(|e| format!("Failed to parse weather: {}", e))?;
 
-    let forecast_url = points_resp["properties"]["forecast"]
-        .as_str()
-        .ok_or("Could not find forecast URL")?;
-
-    // Get the forecast
-    let forecast_resp: serde_json::Value = client
-        .get(forecast_url)
-        .header("User-Agent", "JARVIS-App/1.0")
-        .send()
-        .await
-        .map_err(|e| format!("Failed to fetch forecast: {}", e))?
-        .json()
-        .await
-        .map_err(|e| format!("Failed to parse forecast: {}", e))?;
-
-    let periods = forecast_resp["properties"]["periods"]
-        .as_array()
-        .ok_or("No forecast periods found")?;
-
-    let current = periods.first().ok_or("No current weather data")?;
-
-    let forecast: Vec<ForecastPeriod> = periods
-        .iter()
-        .take(6)
-        .filter_map(|p| {
-            Some(ForecastPeriod {
-                name: p["name"].as_str()?.to_string(),
-                temperature: p["temperature"].as_i64()? as i32,
-                unit: p["temperatureUnit"].as_str()?.to_string(),
-                short_forecast: p["shortForecast"].as_str()?.to_string(),
-            })
-        })
-        .collect();
+    let current = &resp["current"];
+    
+    // Map weather codes to conditions
+    let code = current["weather_code"].as_i64().unwrap_or(0);
+    let conditions = match code {
+        0 => "Clear sky",
+        1..=3 => "Partly cloudy",
+        45 | 48 => "Foggy",
+        51..=55 => "Drizzle",
+        61..=65 => "Rain",
+        71..=75 => "Snow",
+        80..=82 => "Rain showers",
+        95..=99 => "Thunderstorm",
+        _ => "Unknown",
+    }.to_string();
 
     Ok(WeatherData {
-        temperature: current["temperature"].as_f64().unwrap_or(0.0) as f32,
-        unit: current["temperatureUnit"].as_str().unwrap_or("F").to_string(),
-        conditions: current["shortForecast"].as_str().unwrap_or("Unknown").to_string(),
-        humidity: current["relativeHumidity"]["value"].as_i64().map(|h| h as i32),
-        wind_speed: current["windSpeed"].as_str().map(|s| s.to_string()),
-        forecast,
+        temperature: current["temperature_2m"].as_f64().unwrap_or(0.0) as f32,
+        unit: "F".to_string(),
+        conditions,
+        humidity: current["relative_humidity_2m"].as_i64().map(|h| h as i32),
+        wind_speed: current["wind_speed_10m"].as_f64().map(|w| format!("{:.0} mph", w)),
+        forecast: vec![], // Open-Meteo has forecast, but keeping simple for now
     })
 }
 
