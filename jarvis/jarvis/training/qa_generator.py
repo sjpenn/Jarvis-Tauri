@@ -51,8 +51,12 @@ class QAGenerator:
             List of QAPair objects
         """
         qa_pairs = []
+        total_chunks = len(document.chunks)
         
-        for chunk in document.chunks:
+        print(f"Processing {total_chunks} chunks...")
+        
+        for idx, chunk in enumerate(document.chunks, 1):
+            print(f"  Chunk {idx}/{total_chunks} - Generating questions...", end='', flush=True)
             chunk_pairs = await self._generate_from_chunk(
                 chunk=chunk,
                 document_id=document.id,
@@ -60,6 +64,7 @@ class QAGenerator:
                 include_inferential=include_inferential
             )
             qa_pairs.extend(chunk_pairs)
+            print(f" ✓ ({len(chunk_pairs)} Q&A pairs)")
         
         return qa_pairs
     
