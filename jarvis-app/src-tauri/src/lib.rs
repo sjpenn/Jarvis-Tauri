@@ -24,6 +24,7 @@ pub fn run() {
     // Build the app
     tauri::Builder::default()
         .plugin(tauri_plugin_opener::init())
+        .plugin(tauri_plugin_dialog::init())
         // Initialize managed state
         .setup(|app| {
             // Initialize memory store
@@ -34,6 +35,10 @@ pub fn run() {
             // Initialize sensor state
             let sensor_state = SensorState::new();
             app.manage(sensor_state);
+            
+            // Initialize LLM engine (model path can be set later via command)
+            llm::init_llm_engine(None)
+                .expect("Failed to initialize LLM engine");
             
             // Start sensor streaming
             start_sensor_stream(app.handle().clone());
@@ -62,6 +67,7 @@ pub fn run() {
             llm::chat,
             llm::start_chat_stream,
             llm::detect_intent,
+            llm::set_model_path,
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

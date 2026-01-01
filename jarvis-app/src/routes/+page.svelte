@@ -2,32 +2,41 @@
   JARVIS Main Dashboard - 3-column responsive layout
 -->
 <script lang="ts">
-    import { onMount } from 'svelte';
-    import HudCore from '$lib/components/HudCore.svelte';
-    import LiveGraph from '$lib/components/LiveGraph.svelte';
-    import LogTerminal from '$lib/components/LogTerminal.svelte';
-    import MemoryIndicator from '$lib/components/MemoryIndicator.svelte';
-    import ChatInterface from '$lib/components/ChatInterface.svelte';
-    import { initSensorListeners, isConnected, weather } from '$lib/stores/sensors';
-    import { loadUserProfile, loadPreferences, userProfile } from '$lib/stores/memory';
-    import '../app.css';
+    import { onMount } from "svelte";
+    import HudCore from "$lib/components/HudCore.svelte";
+    import LiveGraph from "$lib/components/LiveGraph.svelte";
+    import LogTerminal from "$lib/components/LogTerminal.svelte";
+    import MemoryIndicator from "$lib/components/MemoryIndicator.svelte";
+    import ChatInterface from "$lib/components/ChatInterface.svelte";
+    import ModelSettings from "$lib/components/ModelSettings.svelte";
+    import {
+        initSensorListeners,
+        isConnected,
+        weather,
+    } from "$lib/stores/sensors";
+    import {
+        loadUserProfile,
+        loadPreferences,
+        userProfile,
+    } from "$lib/stores/memory";
+    import "../app.css";
 
-    let currentTime = '';
-    let currentDate = '';
+    let currentTime = "";
+    let currentDate = "";
 
     function updateClock() {
         const now = new Date();
-        currentTime = now.toLocaleTimeString('en-US', { 
-            hour: '2-digit', 
-            minute: '2-digit', 
-            second: '2-digit',
-            hour12: false 
+        currentTime = now.toLocaleTimeString("en-US", {
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
+            hour12: false,
         });
-        currentDate = now.toLocaleDateString('en-US', { 
-            weekday: 'long', 
-            year: 'numeric', 
-            month: 'long', 
-            day: 'numeric' 
+        currentDate = now.toLocaleDateString("en-US", {
+            weekday: "long",
+            year: "numeric",
+            month: "long",
+            day: "numeric",
         });
     }
 
@@ -35,10 +44,10 @@
         // Initialize clock
         updateClock();
         setInterval(updateClock, 1000);
-        
+
         // Initialize sensor listeners
         await initSensorListeners();
-        
+
         // Load user data
         await loadUserProfile();
         await loadPreferences();
@@ -54,18 +63,20 @@
                 <span class="status-label">CONNECTION</span>
                 <span class="status-value">
                     <span class="status-dot" class:active={$isConnected}></span>
-                    {$isConnected ? 'ONLINE' : 'OFFLINE'}
+                    {$isConnected ? "ONLINE" : "OFFLINE"}
                 </span>
             </div>
-            
+
             <LiveGraph title="CPU Load" type="cpu" height={50} />
             <LiveGraph title="Memory" type="memory" height={50} />
-            
+
             <div class="weather-section panel">
                 <div class="panel-header">WEATHER</div>
                 <div class="panel-content">
                     {#if $weather}
-                        <div class="weather-temp">{$weather.temperature}°{$weather.unit}</div>
+                        <div class="weather-temp">
+                            {$weather.temperature}°{$weather.unit}
+                        </div>
                         <div class="weather-cond">{$weather.conditions}</div>
                     {:else}
                         <div class="weather-loading">Loading...</div>
@@ -92,7 +103,7 @@
         </header>
 
         <HudCore />
-        
+
         <div class="chat-section">
             <ChatInterface />
         </div>
@@ -105,14 +116,16 @@
         <div class="panel-header">MEMORY SYSTEM</div>
         <div class="panel-content">
             <MemoryIndicator />
-            
+
             <div class="memory-browser panel">
                 <div class="panel-header">RECENT MEMORIES</div>
                 <div class="panel-content memory-list">
-                    <p class="empty-state">Memories will appear here as JARVIS learns about you.</p>
+                    <p class="empty-state">
+                        Memories will appear here as JARVIS learns about you.
+                    </p>
                 </div>
             </div>
-            
+
             <div class="tools-section panel">
                 <div class="panel-header">AVAILABLE TOOLS</div>
                 <div class="panel-content">
@@ -133,6 +146,8 @@
                     </div>
                 </div>
             </div>
+
+            <ModelSettings />
         </div>
     </aside>
 </div>
@@ -160,12 +175,14 @@
             overflow-y: auto;
         }
 
-        .left-panel, .right-panel {
+        .left-panel,
+        .right-panel {
             display: none; /* Hide sidebars on mobile */
         }
     }
 
-    .left-panel, .right-panel {
+    .left-panel,
+    .right-panel {
         display: flex;
         flex-direction: column;
         overflow-y: auto;
