@@ -20,6 +20,8 @@ Requires-Dist: flet>=0.21.0
 Requires-Dist: opencv-python>=4.9.0
 Requires-Dist: mss>=9.0.0
 Requires-Dist: pillow>=10.0.0
+Requires-Dist: psutil>=5.9.0
+Requires-Dist: requests>=2.31.0
 Provides-Extra: dev
 Requires-Dist: pytest>=8.0.0; extra == "dev"
 Requires-Dist: pytest-asyncio>=0.23.0; extra == "dev"

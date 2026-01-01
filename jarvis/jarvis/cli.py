@@ -274,7 +274,176 @@ def memory_set_name(
     console.print(f"[green]✓ Name set to: {name}[/green]")
 
 
+# Training subcommands
+train_app = typer.Typer(help="Training data and model customization commands")
+app.add_typer(train_app, name="train")
+
+
+@train_app.command("status")
+def train_status():
+    """Show training pipeline statistics"""
+    from jarvis.core.interaction_store import InteractionStore
+    from pathlib import Path
+    
+    interaction_store = InteractionStore()
+    stats = interaction_store.get_stats()
+    
+    # Check for Q&A files
+    training_dir = Path.home() / ".jarvis" / "training"
+    qa_files = list(training_dir.glob("qa_*.jsonl")) if training_dir.exists() else []
+    
+    total_qa_pairs = 0
+    for qa_file in qa_files:
+        with open(qa_file, 'r') as f:
+            total_qa_pairs += sum(1 for _ in f)
+    
+    lines = []
+    lines.append("[bold cyan]Interaction Logs[/bold cyan]")
+    lines.append(f"  Conversations: {stats['conversation_count']}")
+    lines.append(f"  Messages: {stats['message_count']}")
+    lines.append(f"  Tool Calls: {stats['tool_call_count']}")
+    lines.append(f"  Feedback: {stats['feedback_count']}")
+    if stats['average_rating']:
+        lines.append(f"  Avg Rating: {stats['average_rating']:.1f}")
+    
+    lines.append("\n[bold cyan]Training Data[/bold cyan]")
+    lines.append(f"  Document Q&A Files: {len(qa_files)}")
+    lines.append(f"  Total Q&A Pairs: {total_qa_pairs}")
+    
+    lines.append(f"\n[dim]Interaction DB: {stats['db_path']}[/dim]")
+    if training_dir.exists():
+        lines.append(f"[dim]Training Data: {training_dir}[/dim]")
+    
+    console.print(Panel("\n".join(lines), title="📊 Training Status", border_style="cyan"))
+
+
+@train_app.command("export")
+def train_export(
+    output: Path = typer.Option(None, "--output", "-o", help="Output JSONL file"),
+    min_rating: int = typer.Option(None, "--min-rating", help="Minimum feedback rating"),
+):
+    """Export interaction logs to JSONL format"""
+    from jarvis.core.interaction_store import InteractionStore
+    
+    interaction_store = InteractionStore()
+    
+    if output is None:
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%Y%m%d_%H%M%S")
+        output = Path.home() / ".jarvis" / "training" / f"interactions_{timestamp}.jsonl"
+        output.parent.mkdir(parents=True, exist_ok=True)
+    
+    count = interaction_store.export_to_jsonl(
+        output_path=output,
+        min_rating=min_rating,
+        include_tool_calls=False
+    )
+    
+    console.print(f"[green]✓ Exported {count} conversations to {output}[/green]")
+
+
+@train_app.command("ingest")
+def train_ingest(
+    path: Path = typer.Argument(..., help="Document file or directory to ingest"),
+    recursive: bool = typer.Option(False, "--recursive", "-r", help="Recursive directory search"),
+    questions_per_chunk: int = typer.Option(3, "--questions", "-q", help="Q&A pairs per chunk"),
+):
+    """Ingest documents and generate training Q&A pairs"""
+    
+    async def _ingest():
+        from jarvis.training.training_pipeline import TrainingPipeline
+        jarvis = get_orchestrator()
+        await jarvis.initialize()  # Initialize to set up LLM
+        
+        pipeline = TrainingPipeline(llm_engine=jarvis.llm)
+        
+        console.print(f"[cyan]Processing {path}...[/cyan]")
+        
+        if path.is_dir():
+            docs = await pipeline.ingest_directory(
+                directory_path=path,
+                generate_qa=True,
+                recursive=recursive
+            )
+            console.print(f"[green]✓ Processed {len(docs)} documents[/green]")
+        else:
+            doc = await pipeline.ingest_document(
+                document_path=path,
+                generate_qa=True,
+                questions_per_chunk=questions_per_chunk
+            )
+            console.print(f"[green]✓ Processed {path.name}[/green]")
+        
+        # Show stats
+        stats = pipeline.get_stats()
+        console.print(f"[dim]Total Q&A pairs: {stats['total_qa_pairs']}[/dim]")
+    
+    asyncio.run(_ingest())
+
+
+@train_app.command("prepare")
+def train_prepare(
+    output: str = typer.Option("training_dataset", "--output", "-o", help="Output dataset name"),
+    min_rating: int = typer.Option(None, "--min-rating", help="Minimum interaction rating"),
+    include_documents: bool = typer.Option(True, "--documents/--no-documents", help="Include document Q&A"),
+):
+    """Prepare complete training dataset from interactions and documents"""
+    
+    async def _prepare():
+        from jarvis.training.training_pipeline import TrainingPipeline
+        jarvis = get_orchestrator()
+        await jarvis.initialize()  # Initialize to set up LLM
+        
+        pipeline = TrainingPipeline(llm_engine=jarvis.llm)
+        
+        console.print("[cyan]Preparing training dataset...[/cyan]")
+        
+        output_path = pipeline.prepare_training_dataset(
+            min_rating=min_rating,
+            include_documents=include_documents,
+            output_name=output
+        )
+        
+        # Count examples
+        with open(output_path, 'r') as f:
+            count = sum(1 for _ in f)
+        
+        console.print(f"[green]✓ Created dataset: {output_path}[/green]")
+        console.print(f"[green]  Total examples: {count}[/green]")
+    
+    asyncio.run(_prepare())
+
+
+@train_app.command("create-model")
+def train_create_model(
+    name: str = typer.Option("jarvis-enhanced", "--name", "-n", help="Name for custom model"),
+    base: str = typer.Option("llama3.3", "--base", "-b", help="Base model to customize"),
+    max_examples: int = typer.Option(5, "--examples", "-e", help="Max examples to include"),
+    temperature: float = typer.Option(0.7, "--temperature", "-t", help="Model temperature"),
+):
+    """Create custom Ollama model from learned interactions"""
+    from jarvis.training.modelfile_generator import ModelfileGenerator
+    
+    generator = ModelfileGenerator()
+    
+    console.print(f"[cyan]Generating Modelfile for '{name}'...[/cyan]")
+    
+    modelfile_path = generator.generate_modelfile(
+        base_model=base,
+        max_examples=max_examples,
+        temperature=temperature
+    )
+    
+    console.print(f"\n[green]✓ Modelfile created: {modelfile_path}[/green]")
+    console.print("\n[bold]Next steps:[/bold]")
+    console.print(f"  1. Review the Modelfile: cat {modelfile_path}")
+    console.print(f"  2. Create the model: ollama create {name} -f {modelfile_path}")
+    console.print(f"  3. Update config to use '{name}' as your primary_model")
+    console.print(f"  4. Test it: jarvis chat 'Hello JARVIS'")
+
+
 @app.command()
+
 def vision(
     mode: str = typer.Argument("screen", help="Mode: screen, camera, or path to image"),
     prompt: str = typer.Option("Describe what you see.", "--prompt", "-p", help="Question about the image"),

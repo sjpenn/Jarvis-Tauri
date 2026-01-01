@@ -7,6 +7,7 @@ from pathlib import Path
 from typing import AsyncIterator, Dict, List, Optional
 
 from jarvis.core.config import Settings, load_config
+from jarvis.core.interaction_store import InteractionStore
 from jarvis.core.llm_engine import LLMEngine, LLMResponse, Tool, ToolCall
 from jarvis.core.stt_engine import STTEngine
 from jarvis.core.tts_engine import TTSEngine
@@ -42,6 +43,10 @@ class JARVISOrchestrator:
         self.memory_integration = None  # Will be MemoryIntegration or None
         self.agent_coordinator = None  # Will be AgentCoordinator or None
         self._initialized = False
+        
+        # Initialize interaction logging
+        self.interaction_store = InteractionStore()
+        self.current_conversation_id: Optional[int] = None
     
     async def initialize(self) -> None:
         """Initialize all components based on configuration"""
@@ -374,39 +379,45 @@ class JARVISOrchestrator:
         Includes user profile, preferences, and important memories
         so JARVIS knows who it's talking to.
         """
-        base_prompt = """You are JARVIS, an advanced AI assistant inspired by Tony Stark's AI.
+        base_prompt = """You are JARVIS, Tony Stark's sophisticated British AI assistant.
 
 **Personality:**
-- Helpful, witty, and slightly formal
-- Proactive in offering relevant information
-- Concise but thorough
+- Dry British wit with subtle sarcasm
+- Supremely competent yet charmingly modest
+- Address user as "Sir" occasionally
+- Keep responses CONCISE - you're efficient, not chatty
+- Example tone: "The next Metro arrives in 3 minutes, Sir. I trust that's sufficient time."
+
+**Core Behavior:**
+- Be direct and to-the-point
+- No unnecessary pleasantries or verbose explanations
+- When you have data, present it cleanly
+- Add a touch of British humor when appropriate
+- Never apologize excessively - you're JARVIS, not a servant
 
 **Capabilities:**
-- Real-time access to calendar, email, documents, and tasks
-- Voice interaction through speech recognition and synthesis
-- Autonomous execution of approved actions
-- Persistent memory to remember user information and preferences
+- Real-time transit schedules (Metro, Amtrak, MARC, VRE) 
+- Calendar, email, weather, and flight tracking
+- Voice interaction and persistent memory
+- Use tools proactively to fetch real data
 
-**Memory Usage:**
-- When the user tells you their name, use the set_user_name tool
-- When the user shares preferences, use set_preference to remember them
-- Use remember_about_user for important facts about the user
-- Check recall_user_info when you need to personalize responses
+**Tool Usage:**
+- ALWAYS use get_next_train for Metro/train queries - never guess schedules
+- Use set_user_name when learning the user's name
+- Use set_preference to remember user preferences
+- Use remember_about_user for important facts
 
-**Behavior:**
-- Anticipate needs before asked
-- Provide concise, actionable responses
-- Explain reasoning for complex decisions
-- Use tools when appropriate to complete tasks
-- Address the user by name when known
+**Response Style:**
+Good: "Silver Line to Wiehle in 4 minutes, Sir."
+Bad: "I'd be delighted to help you find the next train! Let me check the schedules for you and see what I can find..."
 
-Always respond naturally as if speaking out loud. Keep responses concise for voice output."""
-        
+Keep it crisp. You're JARVIS."""
+
         # Add memory context if available
         if self.memory_integration:
             memory_context = self.memory_integration.get_context_for_prompt()
             if memory_context:
-                base_prompt += f"\n\n**Known User Context:**\n{memory_context}"
+                base_prompt += f"\n\n**User Context:**\n{memory_context}"
         
         return base_prompt
     
@@ -459,6 +470,19 @@ Always respond naturally as if speaking out loud. Keep responses concise for voi
         """
         await self.initialize()
         
+        # Ensure we have an active conversation
+        if self.current_conversation_id is None:
+            self.current_conversation_id = self.interaction_store.start_conversation(
+                metadata={"source": "chat"}
+            )
+        
+        # Log user message
+        user_message_id = self.interaction_store.log_message(
+            conversation_id=self.current_conversation_id,
+            role="user",
+            content=message
+        )
+        
         # Get available tools
         tools = self.get_all_tools()
         
@@ -479,6 +503,15 @@ Always respond naturally as if speaking out loud. Keep responses concise for voi
             for tool_call in response.tool_calls:
                 result = await self.execute_tool(tool_call)
                 tool_results.append(f"{tool_call.name}: {result}")
+                
+                # Log tool call
+                self.interaction_store.log_tool_call(
+                    message_id=user_message_id,
+                    tool_name=tool_call.name,
+                    arguments=tool_call.arguments,
+                    result=result,
+                    success=True  # Could catch exceptions to track failures
+                )
             
             # Feed tool results back to LLM for final response
             tool_context = "\n".join(tool_results)
@@ -489,6 +522,14 @@ Always respond naturally as if speaking out loud. Keep responses concise for voi
             final_response = follow_up.content
         else:
             final_response = response.content
+        
+        # Log assistant response
+        assistant_message_id = self.interaction_store.log_message(
+            conversation_id=self.current_conversation_id,
+            role="assistant",
+            content=final_response,
+            model=self.settings.llm.primary_model
+        )
         
         # Update conversation history
         self.conversation_history.append({"role": "user", "content": message})
@@ -517,6 +558,19 @@ Always respond naturally as if speaking out loud. Keep responses concise for voi
         """
         await self.initialize()
         
+        # Ensure we have an active conversation
+        if self.current_conversation_id is None:
+            self.current_conversation_id = self.interaction_store.start_conversation(
+                metadata={"source": "stream_chat"}
+            )
+        
+        # Log user message
+        user_message_id = self.interaction_store.log_message(
+            conversation_id=self.current_conversation_id,
+            role="user",
+            content=message
+        )
+        
         # Get system prompt with memory context
         system_prompt = self._get_system_prompt()
         
@@ -534,6 +588,14 @@ Always respond naturally as if speaking out loud. Keep responses concise for voi
         
         # Build final response
         final_response = "".join(full_response)
+        
+        # Log assistant response
+        assistant_message_id = self.interaction_store.log_message(
+            conversation_id=self.current_conversation_id,
+            role="assistant",
+            content=final_response,
+            model=self.settings.llm.primary_model
+        )
         
         # Update conversation history
         self.conversation_history.append({"role": "user", "content": message})

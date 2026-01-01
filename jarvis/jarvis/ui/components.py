@@ -18,7 +18,7 @@ class Orb(ft.Container):
             animate_opacity=ft.Animation(500, ft.AnimationCurve.EASE_IN_OUT),
         )
         self.content = self.orb_container
-        self.alignment = ft.alignment.center
+        self.alignment = ft.alignment.Alignment(0, 0)  # center
         self.expand = True
 
     def set_state(self, state: str):
@@ -64,7 +64,7 @@ class StatRing(ft.Column):
             ft.Stack(
                 [
                     self.progress_ring,
-                    ft.Container(content=self.value_text, alignment=ft.alignment.center, width=60, height=60)
+                    ft.Container(content=self.value_text, alignment=ft.alignment.Alignment(0, 0), width=60, height=60)
                 ]
             ),
             ft.Text(self.label, size=10, color="grey400")
@@ -88,7 +88,7 @@ class HexButton(ft.Container):
         self.border = ft.border.all(1, "cyan700")
         self.border_radius = 10
         self.on_click = on_click
-        self.alignment = ft.alignment.center
+        self.alignment = ft.alignment.Alignment(0, 0)  # center
         self.bgcolor = "cyan,0.1" # Flet supports "color,opacity" syntax sometimes or just use distinct color
         # Actually let's just use a dark cyan
         self.bgcolor = "#1A4D4D"

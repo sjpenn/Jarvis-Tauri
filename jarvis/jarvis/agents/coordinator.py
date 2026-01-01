@@ -109,11 +109,11 @@ class AgentCoordinator:
             ),
             Tool(
                 name="get_next_train",
-                description="Get next train/transit departure from a station",
+                description="Get real-time Metro/subway/train departure times from WMATA, MARC, Amtrak, and VRE. Use this for ANY query about train or Metro schedules, next departures, or station times in the DC area (e.g. 'When's the next Metro?', 'Train times from Tyson's', 'Next train to Union Station').",
                 parameters={
                     "station": {
                         "type": "string",
-                        "description": "Station name or 'current_location'",
+                        "description": "Station name (e.g., 'Tysons', 'Metro Center', 'Union Station', 'Greensboro') - even partial names work",
                     },
                     "destination": {
                         "type": "string",
@@ -267,22 +267,97 @@ Say "approve {action.id}" to send, or "reject {action.id}" to cancel."""
             return "Transport agent not configured. Please set up transit API in config."
         
         try:
+            station = params.get("station", "")
+            
+            # Detect if this is a Metro query vs commuter rail
+            # Metro station indicators: common WMATA station names
+            metro_indicators = [
+                "metro center", "gallery place", "union station", "dupont", "foggy bottom",
+                "farragut", "mcpherson", "federal", "smithsonian", "l'enfant", "pentagon",
+                "crystal", "national airport", "dca", "rosslyn", "clarendon", "ballston",
+                "bethesda", "silver spring", "columbia heights", "u street", "shaw",
+                "chinatown", "archives", "waterfront", "navy yard", "anacostia",
+                "king street", "braddock", "eastern market", "capitol", "judiciary",
+                "tenleytown", "friendship heights", "cleveland park", "woodley park",
+                "noma", "tysons", "mcle an", "wiehle", "reston"  # Silver line
+            ]
+            
+            station_lower = station.lower()
+            is_metro_station = any(indicator in station_lower for indicator in metro_indicators)
+            
+            # Default mode based on detection
+            if is_metro_station:
+                mode = "metro"  # WMATA Metro
+            else:
+                mode = "rail"   # Commuter rail (MARC, Amtrak, VRE)
+            
             results = await transport_agent.search({
-                "station": params.get("station", ""),
+                "station": station,
                 "destination": params.get("destination"),
+                "mode": mode,
             })
             
             if not results:
-                return "No upcoming departures found."
+                if mode == "metro":
+                    return f"""No Metro trains found from {station}.
+
+This could mean:
+- No trains currently scheduled
+- WMATA API may not be responding
+- Station name needs adjustment (try: "{station} Station" or check spelling)
+
+WMATA API is configured. If this persists, the API may be experiencing issues."""
+                else:
+                    return f"""No commuter rail departures found from {station}.
+
+This could mean:
+- The station name isn't recognized (try: "Greensboro Station", "Union Station")
+- No trains are currently scheduled
+- Rail connectors (MARC, Amtrak, VRE) may not have data for this station
+
+Current rail providers enabled: MARC, Amtrak, VRE
+
+Try asking for "next Metro from {station}" if you meant the subway."""
             
-            lines = ["🚆 Upcoming departures:\n"]
-            for trip in results[:5]:
-                lines.append(f"• {trip.get('route', '')} to {trip.get('destination', '')} at {trip.get('time', '')}")
+            mode_label = "Metro" if mode == "metro" else "Train"
+            lines = [f"🚆 Upcoming {mode_label.lower()} departures:\n"]
+            for dep in results[:5]:
+                # Handle Departure objects (have attributes) or dicts
+                if hasattr(dep, 'route'):
+                    # It's a Departure object
+                    route = dep.route
+                    destination = dep.destination
+                    provider = f" ({dep.provider})" if hasattr(dep, 'provider') and dep.provider else ""
+                    
+                    # Format time nicely
+                    if hasattr(dep, 'minutes_away') and dep.minutes_away is not None:
+                        time_str = f"{dep.minutes_away} min"
+                    elif hasattr(dep, 'time'):
+                        time_str = dep.time.strftime("%I:%M %p")
+                    else:
+                        time_str = "Unknown"
+                    
+                    lines.append(f"• {route} to {destination} - {time_str}{provider}")
+                else:
+                    # It's a dict (fallback)
+                    lines.append(f"• {dep.get('route', '')} to {dep.get('destination', '')} at {dep.get('time', '')}")
             
             return "\n".join(lines)
             
         except Exception as e:
-            return f"Error getting train info: {e}"
+            import traceback
+            return f"""I encountered an issue while trying to fetch train information.
+
+Error: {str(e)}
+
+Debug info: {traceback.format_exc()[:200]}
+
+Please check:
+1. Your transit API keys are configured in models.yaml
+2. The connectors are properly initialized
+3. The transit provider APIs are accessible"""
+
+
     
     def _list_pending_actions(self) -> str:
         """List all pending actions"""

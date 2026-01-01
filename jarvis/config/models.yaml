@@ -16,10 +16,16 @@ stt:
   device: auto
 
 tts:
-  # Options: macos, elevenlabs, orpheus
-  provider: macos
+  # Options: macos, mlx, elevenlabs
+  # For MLX models (Kokoro-82M, Marvis-TTS): Requires Python 3.10+
+  # MLX provides 250-347ms latency with voice cloning on Apple Silicon
+  provider: macos  # Change to 'mlx' after upgrading to Python 3.10+
   voice: Samantha  # Or "Daniel" for British male
   speed: 1.0
+  
+  # MLX model options (when provider: mlx):
+  # - prince-canuma/Kokoro-82M (ultra-fast, 347ms, 82M params)
+  # - Marvis-AI/marvis-tts-250m-v0.1 (streaming, voice cloning, 250ms)
 
 wake_word:
   enabled: true  # Wake word activation enabled
@@ -28,7 +34,7 @@ wake_word:
 
 vision:
   provider: ollama
-  model: llava:7b  # or moondream, llama3.2-vision
+  model: moondream  # or llama3.2-vision (llava:7b removed to save space)
   camera_index: 0
 
 integrations:

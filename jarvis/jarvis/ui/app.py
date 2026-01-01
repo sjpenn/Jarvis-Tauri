@@ -446,14 +446,34 @@ class JarvisUI:
         self.page.update()
         
         try:
-            # Send to LLM
-            # Note: We aren't doing the streaming token updates here for simplicity in this artifact, 
-            # but we could add it back.
-            response = await self.orchestrator.chat(text, speak=True)
-            self.orb.set_state("SPEAKING") # Should ideally be triggered by TTS
+            # Create message bubble for streaming response
+            response_bubble = ft.Container(
+                content=ft.Markdown("", selectable=True),
+                padding=10,
+                border_radius=10,
+                bgcolor="#1A1A1A",
+                border=ft.border.all(1, "grey800"),
+                width=400
+            )
+            
+            self.chat_list.controls.append(
+                ft.Column([response_bubble], horizontal_alignment=ft.CrossAxisAlignment.START)
+            )
+            self.chat_list.update()
+            
+            # Stream response from LLM
+            full_response = []
+            async for token in self.orchestrator.stream_chat(text, speak=False):
+                full_response.append(token)
+                response_bubble.content.value = "".join(full_response)
+                response_bubble.update()
+            
+            # After streaming complete, speak the final response
+            self.orb.set_state("SPEAKING")
             self.page.update()
             
-            await self._add_message(response, is_user=False)
+            if self.orchestrator.tts:
+                await self.orchestrator.tts.speak("".join(full_response))
             
         finally:
             self.orb.set_state("IDLE")
