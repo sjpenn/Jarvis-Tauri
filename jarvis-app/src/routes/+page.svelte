@@ -23,6 +23,7 @@
 
     let currentTime = "";
     let currentDate = "";
+    let showServicesPanel = false;
 
     function updateClock() {
         const now = new Date();
@@ -126,17 +127,76 @@
                 </div>
             </div>
 
-            <div class="tools-icons">
-                <div class="tool-icon-compact weather" title="Weather">🌤️</div>
-                <div class="tool-icon-compact transit" title="Transit">🚇</div>
-                <div class="tool-icon-compact flights" title="Flights">✈️</div>
-                <div class="tool-icon-compact memory" title="Memory">🧠</div>
-            </div>
+            <button
+                class="status-link"
+                on:click={() => (showServicesPanel = true)}
+            >
+                VIEW SERVICES STATUS →
+            </button>
 
             <ModelSettings />
         </div>
     </aside>
 </div>
+
+<!-- Slide-out Services Panel -->
+{#if showServicesPanel}
+    <div
+        class="services-backdrop"
+        on:click={() => (showServicesPanel = false)}
+    ></div>
+    <div class="services-panel">
+        <div class="services-header">
+            <span>SERVICES STATUS</span>
+            <button
+                class="close-btn"
+                on:click={() => (showServicesPanel = false)}>✕</button
+            >
+        </div>
+        <div class="services-list">
+            <div class="service-item">
+                <span class="service-icon">🌤️</span>
+                <div class="service-info">
+                    <span class="service-name">Weather</span>
+                    <span class="service-provider">Open-Meteo</span>
+                </div>
+                <span class="service-status online">ONLINE</span>
+            </div>
+            <div class="service-item">
+                <span class="service-icon">🚇</span>
+                <div class="service-info">
+                    <span class="service-name">Transit</span>
+                    <span class="service-provider">WMATA API</span>
+                </div>
+                <span class="service-status online">ONLINE</span>
+            </div>
+            <div class="service-item">
+                <span class="service-icon">✈️</span>
+                <div class="service-info">
+                    <span class="service-name">Flights</span>
+                    <span class="service-provider">OpenSky Network</span>
+                </div>
+                <span class="service-status online">ONLINE</span>
+            </div>
+            <div class="service-item">
+                <span class="service-icon">🧠</span>
+                <div class="service-info">
+                    <span class="service-name">Memory</span>
+                    <span class="service-provider">SQLite Local</span>
+                </div>
+                <span class="service-status online">ACTIVE</span>
+            </div>
+            <div class="service-item">
+                <span class="service-icon">🤖</span>
+                <div class="service-info">
+                    <span class="service-name">LLM</span>
+                    <span class="service-provider">Phi-3 Mini</span>
+                </div>
+                <span class="service-status pending">PENDING</span>
+            </div>
+        </div>
+    </div>
+{/if}
 
 <style>
     .jarvis-dashboard {
@@ -346,5 +406,161 @@
     .tool-icon-compact.memory {
         background: linear-gradient(135deg, #00ff88, #00cc6a);
         box-shadow: 0 0 10px rgba(0, 255, 136, 0.3);
+    }
+
+    .status-link {
+        width: 100%;
+        padding: var(--space-md);
+        background: transparent;
+        border: 1px solid var(--primary-blue);
+        border-radius: 4px;
+        color: var(--primary-blue);
+        font-family: var(--font-display);
+        font-size: 0.7rem;
+        letter-spacing: 0.1em;
+        cursor: pointer;
+        transition: all 0.2s ease;
+    }
+
+    .status-link:hover {
+        background: rgba(0, 243, 255, 0.1);
+        box-shadow: var(--glow-sm);
+    }
+
+    .services-backdrop {
+        position: fixed;
+        top: 0;
+        left: 0;
+        right: 0;
+        bottom: 0;
+        background: rgba(0, 0, 0, 0.5);
+        z-index: 100;
+        animation: fade-in 0.2s ease;
+    }
+
+    .services-panel {
+        position: fixed;
+        top: 0;
+        right: 0;
+        width: 350px;
+        height: 100%;
+        background: rgba(10, 25, 35, 0.95);
+        backdrop-filter: blur(20px);
+        border-left: 1px solid var(--primary-blue);
+        z-index: 101;
+        animation: slide-in 0.3s ease;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .services-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: var(--space-lg);
+        border-bottom: var(--border-subtle);
+        font-family: var(--font-display);
+        font-size: 0.9rem;
+        letter-spacing: 0.15em;
+        color: var(--primary-blue);
+    }
+
+    .close-btn {
+        background: none;
+        border: none;
+        color: var(--text-muted);
+        font-size: 1.2rem;
+        cursor: pointer;
+        padding: 4px;
+    }
+
+    .close-btn:hover {
+        color: var(--primary-blue);
+    }
+
+    .services-list {
+        flex: 1;
+        overflow-y: auto;
+        padding: var(--space-md);
+    }
+
+    .service-item {
+        display: flex;
+        align-items: center;
+        gap: var(--space-md);
+        padding: var(--space-md);
+        border-radius: 8px;
+        background: rgba(0, 100, 130, 0.1);
+        margin-bottom: var(--space-sm);
+        transition: all 0.2s ease;
+    }
+
+    .service-item:hover {
+        background: rgba(0, 100, 130, 0.2);
+    }
+
+    .service-icon {
+        font-size: 1.5rem;
+    }
+
+    .service-info {
+        flex: 1;
+        display: flex;
+        flex-direction: column;
+    }
+
+    .service-name {
+        font-family: var(--font-display);
+        font-size: 0.85rem;
+        color: var(--text-primary);
+    }
+
+    .service-provider {
+        font-size: 0.7rem;
+        color: var(--text-muted);
+    }
+
+    .service-status {
+        font-family: var(--font-mono);
+        font-size: 0.65rem;
+        padding: 4px 8px;
+        border-radius: 4px;
+        letter-spacing: 0.1em;
+    }
+
+    .service-status.online {
+        background: rgba(0, 255, 136, 0.15);
+        color: var(--success-green);
+        border: 1px solid var(--success-green);
+    }
+
+    .service-status.pending {
+        background: rgba(255, 213, 0, 0.15);
+        color: var(--warning-yellow);
+        border: 1px solid var(--warning-yellow);
+    }
+
+    .service-status.offline {
+        background: rgba(255, 42, 42, 0.15);
+        color: var(--alert-red);
+        border: 1px solid var(--alert-red);
+    }
+
+    @keyframes fade-in {
+        from {
+            opacity: 0;
+        }
+        to {
+            opacity: 1;
+        }
+    }
+
+    @keyframes slide-in {
+        from {
+            transform: translateX(100%);
+        }
+        to {
+            transform: translateX(0);
+        }
     }
 </style>
