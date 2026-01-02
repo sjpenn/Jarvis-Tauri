@@ -11,15 +11,26 @@ pub struct StopInfo {
     pub id: String,
     pub lat: Option<f64>,
     pub lon: Option<f64>,
+    pub feed_id: String, // Track which city/feed this stop belongs to
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct FeedMetadata {
+    pub feed_id: String,
+    pub last_updated: i64,
+    pub version: Option<String>,
 }
 
 pub struct GtfsManager {
     base_path: PathBuf,
     current_feed: Mutex<Option<Gtfs>>,
+    feed_id: String,
+    metadata: Mutex<Option<FeedMetadata>>,
 }
 
 impl GtfsManager {
-    pub fn new() -> Self {
+    /// Create a GtfsManager for a specific city/feed
+    pub fn new(feed_id: String) -> Self {
         let mut path = std::env::current_exe().unwrap_or_default();
         path.pop(); // Remove executable name
         
@@ -60,6 +71,8 @@ impl GtfsManager {
         Self {
             base_path: final_path,
             current_feed: Mutex::new(None),
+            feed_id,
+            metadata: Mutex::new(None),
         }
     }
 
@@ -94,13 +107,52 @@ impl GtfsManager {
             .map_err(|e| format!("Failed to parse GTFS: {}", e))?;
             
         *self.current_feed.lock().unwrap() = Some(gtfs);
+        
+        // Update metadata
+        *self.metadata.lock().unwrap() = Some(FeedMetadata {
+            feed_id: name.to_string(),
+            last_updated: chrono::Utc::now().timestamp(),
+            version: None,
+        });
+        
         Ok(format!("Loaded feed: {}", name))
+    }
+    
+    /// Load feed from an extracted directory (not ZIP)
+    pub fn load_feed_from_directory(&self, city_code: &str) -> Result<String, String> {
+        let feed_dir = self.base_path.join(city_code);
+        
+        if !feed_dir.exists() {
+            return Err(format!("Feed directory not found: {:?}", feed_dir));
+        }
+
+        // Check if extracted (must have stops.txt and routes.txt)
+        if !feed_dir.join("stops.txt").exists() || !feed_dir.join("routes.txt").exists() {
+            return Err(format!("Invalid GTFS directory (missing required files): {:?}", feed_dir));
+        }
+
+        log::info!("Loading GTFS from directory: {:?}", feed_dir);
+        
+        let gtfs = Gtfs::from_path(feed_dir.to_str().unwrap())
+            .map_err(|e| format!("Failed to parse GTFS from directory: {}", e))?;
+            
+        *self.current_feed.lock().unwrap() = Some(gtfs);
+        
+        // Update metadata
+        *self.metadata.lock().unwrap() = Some(FeedMetadata {
+            feed_id: city_code.to_string(),
+            last_updated: chrono::Utc::now().timestamp(),
+            version: None,
+        });
+        
+        Ok(format!("Loaded feed from directory: {}", city_code))
     }
     
     pub fn get_stops(&self, limit: usize) -> Result<Vec<StopInfo>, String> {
         let guard = self.current_feed.lock().unwrap();
         let feed = guard.as_ref().ok_or("No feed loaded")?;
         
+        let feed_id = self.feed_id.clone();
         let stops = feed.stops.values()
             .take(limit)
             .map(|s| StopInfo {
@@ -108,6 +160,7 @@ impl GtfsManager {
                 id: s.id.clone(),
                 lat: s.latitude,
                 lon: s.longitude,
+                feed_id: feed_id.clone(),
             })
             .collect();
             
@@ -136,6 +189,7 @@ impl GtfsManager {
                         id: stop.id.clone(),
                         lat: Some(slat),
                         lon: Some(slon),
+                        feed_id: self.feed_id.clone(),
                     });
                 }
             }
@@ -167,6 +221,7 @@ impl GtfsManager {
                     id: stop.id.clone(),
                     lat: stop.latitude,
                     lon: stop.longitude,
+                    feed_id: self.feed_id.clone(),
                 }));
             }
             
@@ -176,6 +231,7 @@ impl GtfsManager {
                     id: stop.id.clone(),
                     lat: stop.latitude,
                     lon: stop.longitude,
+                    feed_id: self.feed_id.clone(),
                 });
                 best_score = 1;
             }

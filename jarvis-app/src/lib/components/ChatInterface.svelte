@@ -10,6 +10,7 @@
         startStreamingChat,
     } from "$lib/stores/chat";
     import { memoryAccessActive } from "$lib/stores/memory";
+    import MarkdownMessage from "./MarkdownMessage.svelte";
     import { afterUpdate, tick } from "svelte";
 
     let inputValue = "";
@@ -112,7 +113,7 @@
                 class:has-context={msg.memoryContextUsed}
             >
                 <div class="message-content">
-                    {msg.content}
+                    <MarkdownMessage content={msg.content} />
                 </div>
                 {#if msg.memoriesRetrieved && msg.memoriesRetrieved > 0}
                     <div class="context-badge">

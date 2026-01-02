@@ -52,4 +52,8 @@ encoding_rs = "0.8"
 
 # Transit
 gtfs-structures = "0.46"
+prost = "0.13"
+gtfs-rt = "0.5"
+zip = "0.6"
+futures = "0.3"
 

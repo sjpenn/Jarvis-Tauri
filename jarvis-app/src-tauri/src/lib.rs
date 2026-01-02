@@ -12,10 +12,13 @@ mod memory;
 mod external;
 mod llm;
 mod gtfs;
+mod gtfs_rt;
+mod feed_manager;
 
 use sensor::{SensorState, start_sensor_stream};
 use memory::MemoryStore;
 use gtfs::GtfsState;
+use feed_manager::FeedRegistryState;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -48,11 +51,19 @@ pub fn run() {
             let sensor_state = SensorState::new();
             app.manage(sensor_state);
             
-            // Initialize GTFS manager
-            let gtfs_manager = gtfs::GtfsManager::new();
+            // Initialize GTFS manager (default to wmata)
+            let gtfs_manager = gtfs::GtfsManager::new("wmata".to_string());
             // Try to load WMATA Rail by default
             let _ = gtfs_manager.load_feed("wmata-rail");
             app.manage(GtfsState(gtfs_manager));
+            
+            // Initialize Feed Registry
+            let gtfs_data_path = std::env::current_dir()
+                .unwrap_or_default()
+                .join("src-tauri")
+                .join("gtfs_data");
+            let feed_registry = feed_manager::FeedRegistry::new(gtfs_data_path);
+            app.manage(FeedRegistryState(feed_registry));
             
             // Initialize LLM engine with saved path if available
             llm::init_llm_engine(saved_model_path)
@@ -121,6 +132,10 @@ pub fn run() {
             gtfs::load_gtfs_feed,
             gtfs::get_gtfs_stops,
             gtfs::find_closest_stop,
+            // Feed Manager commands
+            feed_manager::list_available_cities,
+            feed_manager::download_city_feed,
+            feed_manager::get_city_by_location,
             // LLM commands
             llm::chat,
             llm::start_chat_stream,

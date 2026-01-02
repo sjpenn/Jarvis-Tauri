@@ -12,6 +12,7 @@ export interface ChatMessage {
     timestamp: number;
     memoryContextUsed?: boolean;
     memoriesRetrieved?: number;
+    contentType?: 'text' | 'markdown'; // Support for structured content
 }
 
 export interface ThoughtLog {
@@ -70,7 +71,8 @@ export async function sendMessage(content: string) {
             content: response.message,
             timestamp: Date.now(),
             memoryContextUsed: response.memory_context_used,
-            memoriesRetrieved: response.memories_retrieved
+            memoriesRetrieved: response.memories_retrieved,
+            contentType: 'markdown', // Assistant responses support markdown
         };
         messages.update(m => [...m, assistantMessage]);
 
@@ -131,7 +133,8 @@ export async function startStreamingChat(content: string) {
                     id: crypto.randomUUID(),
                     role: 'assistant',
                     content: r.trim(),
-                    timestamp: Date.now()
+                    timestamp: Date.now(),
+                    contentType: 'markdown', // Streaming responses support markdown
                 };
                 messages.update(m => [...m, assistantMessage]);
             }
