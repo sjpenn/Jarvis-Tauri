@@ -4,10 +4,26 @@
 <script lang="ts">
     import { invoke } from "@tauri-apps/api/core";
     import { open } from "@tauri-apps/plugin-dialog";
+    import { llmStatus, modelName } from "$lib/stores/llm";
 
     let modelPath = "";
+    let systemPrompt = "You are JARVIS, a helpful AI assistant.";
     let status = "";
     let isLoading = false;
+
+    // Load saved preferences on mount
+    import { onMount } from "svelte";
+    onMount(async () => {
+        try {
+            const prefs = await invoke("get_all_preferences");
+            const sp = (prefs as any[]).find(
+                (p) => p.category === "llm" && p.key === "system_prompt",
+            );
+            if (sp) systemPrompt = sp.value;
+        } catch (e) {
+            console.error("Failed to load prefs", e);
+        }
+    });
 
     async function selectModelFile() {
         try {
@@ -30,20 +46,32 @@
         }
     }
 
-    async function setModel() {
-        if (!modelPath) {
-            status = "Please select a model file first";
-            return;
-        }
-
+    async function saveSettings() {
         isLoading = true;
-        status = "Loading model...";
+        status = "Saving settings...";
 
         try {
-            await invoke("set_model_path", { path: modelPath });
-            status = "✓ Model loaded successfully!";
+            // Save System Prompt
+            await invoke("set_preference", {
+                category: "llm",
+                key: "system_prompt",
+                value: systemPrompt,
+            });
+
+            // Load Model if path is provided
+            if (modelPath) {
+                llmStatus.set("LOADING");
+                await invoke("set_model_path", { path: modelPath });
+                modelName.set(
+                    modelPath.split(/[\\/]/).pop() || "Unknown Model",
+                );
+            }
+
+            status = "✓ Settings saved & Model loaded!";
+            llmStatus.set("READY");
         } catch (error) {
             status = `✗ Error: ${error}`;
+            llmStatus.set("ERROR");
         } finally {
             isLoading = false;
         }
@@ -63,23 +91,36 @@
             </a>
         </p>
 
-        <div class="file-selector">
-            <input
-                type="text"
-                class="input"
-                placeholder="No model selected"
-                bind:value={modelPath}
-                readonly
-            />
-            <button class="btn" on:click={selectModelFile}> Browse </button>
+        <div class="setting-group">
+            <label class="label">Model Path</label>
+            <div class="file-selector">
+                <input
+                    type="text"
+                    class="input"
+                    placeholder="No model selected"
+                    bind:value={modelPath}
+                    readonly
+                />
+                <button class="btn" on:click={selectModelFile}> Browse </button>
+            </div>
+        </div>
+
+        <div class="setting-group">
+            <label class="label">System Prompt (Persona)</label>
+            <textarea
+                class="input textarea"
+                bind:value={systemPrompt}
+                rows="3"
+                placeholder="You are JARVIS..."
+            ></textarea>
         </div>
 
         <button
             class="btn btn-primary"
-            on:click={setModel}
-            disabled={!modelPath || isLoading}
+            on:click={saveSettings}
+            disabled={isLoading}
         >
-            {isLoading ? "Loading..." : "Load Model"}
+            {isLoading ? "Saving..." : "Save & Load"}
         </button>
 
         {#if status}
@@ -97,6 +138,26 @@
 <style>
     .model-settings {
         margin-top: var(--space-md);
+    }
+
+    .setting-group {
+        margin-bottom: var(--space-md);
+    }
+
+    .label {
+        display: block;
+        font-size: 0.75rem;
+        color: var(--text-secondary);
+        margin-bottom: var(--space-xs);
+        letter-spacing: 0.05em;
+    }
+
+    .textarea {
+        width: 100%;
+        resize: vertical;
+        font-family: var(--font-mono);
+        font-size: 0.85rem;
+        min-height: 80px;
     }
 
     .hint {
@@ -118,7 +179,6 @@
     .file-selector {
         display: flex;
         gap: var(--space-sm);
-        margin-bottom: var(--space-md);
     }
 
     .file-selector .input {

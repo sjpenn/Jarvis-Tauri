@@ -44,6 +44,47 @@ pub struct FlightInfo {
     pub longitude: f64,
 }
 
+/// System location from IP-API
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct SystemLocation {
+    pub status: String,
+    pub country: String,
+    #[serde(rename = "countryCode")]
+    pub country_code: String,
+    pub region: String,
+    #[serde(rename = "regionName")]
+    pub region_name: String,
+    pub city: String,
+    pub zip: String,
+    pub lat: f64,
+    pub lon: f64,
+    pub timezone: String,
+    pub isp: String,
+    pub org: String,
+    #[serde(rename = "as")]
+    pub as_: String,
+    pub query: String,
+}
+
+/// Get system location from IP-API (free, no key)
+pub async fn get_system_location() -> Result<SystemLocation, String> {
+    let client = reqwest::Client::new();
+    let resp: SystemLocation = client
+        .get("http://ip-api.com/json/")
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch location: {}", e))?
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse location: {}", e))?;
+        
+    if resp.status == "fail" {
+        return Err("API returned fail status".to_string());
+    }
+    
+    Ok(resp)
+}
+
 /// Get weather data from Open-Meteo (free, no API key, global coverage)
 #[tauri::command]
 pub async fn get_weather(latitude: f64, longitude: f64) -> Result<WeatherData, String> {
@@ -90,8 +131,15 @@ pub async fn get_weather(latitude: f64, longitude: f64) -> Result<WeatherData, S
 }
 
 /// Get Metro train times from WMATA API
+use crate::memory::MemoryStore;
+
+/// Get Metro train times from WMATA API
 #[tauri::command]
-pub async fn get_train_times(station_code: String, api_key: String) -> Result<Vec<TrainDeparture>, String> {
+pub async fn get_train_times(station_code: String, state: tauri::State<'_, MemoryStore>) -> Result<Vec<TrainDeparture>, String> {
+    let api_key = state.get_preference("transport", "wmata_api_key")
+        .map_err(|_| "WMATA API key not found in settings".to_string())?
+        .ok_or("WMATA API key not configured")?;
+
     let url = format!(
         "https://api.wmata.com/StationPrediction.svc/json/GetPrediction/{}",
         station_code
@@ -178,4 +226,76 @@ pub async fn get_nearby_flights(
         .collect();
 
     Ok(flights)
+}
+
+/// Transit Route for Rich UI
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransitRoute {
+    pub origin: String,
+    pub destination: String,
+    pub departure_time: String,
+    pub arrival_time: String,
+    pub duration_minutes: i64,
+    pub fare: String,
+    pub legs: Vec<TransitLeg>,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct TransitLeg {
+    pub mode: String, // "Metro", "Transfer", "Bus", "Walk"
+    pub line_name: Option<String>,
+    pub stop_start: Option<String>,
+    pub stop_end: Option<String>,
+    pub duration: i64,
+    pub color: Option<String>,
+    pub description: Option<String>,
+    pub icon: Option<String>,
+}
+
+/// Station to Station Info (Fares and Time)
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct StationToStationInfo {
+    #[serde(rename = "CompositeMiles")]
+    pub miles: f64,
+    #[serde(rename = "RailTime")]
+    pub travel_time_minutes: i32,
+    #[serde(rename = "RailFare")]
+    pub fare: RailFare,
+}
+
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct RailFare {
+    #[serde(rename = "PeakTime")]
+    pub peak: f64,
+    #[serde(rename = "OffPeakTime")]
+    pub off_peak: f64,
+    #[serde(rename = "SeniorDisabled")]
+    pub senior: f64,
+}
+
+/// Get route info (fare, time) between two stations
+pub async fn get_route_info(start_code: &str, end_code: &str, api_key: &str) -> Result<StationToStationInfo, String> {
+    let url = format!(
+        "https://api.wmata.com/Rail.svc/json/jSrcStationToDstStationInfo?FromC={}&ToC={}",
+        start_code, end_code
+    );
+
+    let client = reqwest::Client::new();
+    
+    let resp: serde_json::Value = client
+        .get(&url)
+        .header("api_key", api_key)
+        .send()
+        .await
+        .map_err(|e| format!("Failed to fetch route info: {}", e))?
+        .json()
+        .await
+        .map_err(|e| format!("Failed to parse route info: {}", e))?;
+
+    if let Some(data) = resp["StationToStationInfos"].as_array().and_then(|a| a.first()) {
+        serde_json::from_value(data.clone())
+            .map_err(|e| format!("Failed to deserialize route info: {}", e))
+    } else {
+        Err("No route info found betweeen these stations".to_string())
+    }
 }

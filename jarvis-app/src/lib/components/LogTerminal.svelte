@@ -3,19 +3,19 @@
   Shows real-time logs of RAG retrieval and inference steps
 -->
 <script lang="ts">
-    import { thoughtLogs } from '$lib/stores/chat';
-    import { onMount, afterUpdate } from 'svelte';
+    import { thoughtLogs } from "$lib/stores/chat";
+    import { onMount, afterUpdate } from "svelte";
 
     let terminalEl: HTMLDivElement;
     let autoScroll = true;
 
     function formatTime(timestamp: number): string {
         const date = new Date(timestamp * 1000);
-        return date.toLocaleTimeString('en-US', { 
-            hour12: false, 
-            hour: '2-digit', 
-            minute: '2-digit', 
-            second: '2-digit' 
+        return date.toLocaleTimeString("en-US", {
+            hour12: false,
+            hour: "2-digit",
+            minute: "2-digit",
+            second: "2-digit",
         });
     }
 
@@ -33,9 +33,21 @@
 
     // Demo logs for initial state
     const demoLogs = [
-        { step: 'INIT', detail: 'JARVIS Core v2.0 initialized', timestamp: Date.now() / 1000 },
-        { step: 'SENSOR', detail: 'System monitoring active', timestamp: Date.now() / 1000 },
-        { step: 'MEMORY', detail: 'SQLite store connected', timestamp: Date.now() / 1000 },
+        {
+            step: "INIT",
+            detail: "JARVIS Core v2.0 initialized",
+            timestamp: Date.now() / 1000,
+        },
+        {
+            step: "SENSOR",
+            detail: "System monitoring active",
+            timestamp: Date.now() / 1000,
+        },
+        {
+            step: "MEMORY",
+            detail: "SQLite store connected",
+            timestamp: Date.now() / 1000,
+        },
     ];
 </script>
 
@@ -44,7 +56,11 @@
         <span>SYSTEM LOG</span>
         <span class="blink-cursor">_</span>
     </div>
-    <div class="terminal-content" bind:this={terminalEl} on:scroll={handleScroll}>
+    <div
+        class="terminal-content"
+        bind:this={terminalEl}
+        on:scroll={handleScroll}
+    >
         {#each demoLogs as log}
             <div class="log-entry demo">
                 <span class="timestamp">[{formatTime(log.timestamp)}]</span>
@@ -52,7 +68,7 @@
                 <span class="detail">{log.detail}</span>
             </div>
         {/each}
-        
+
         {#each $thoughtLogs as log}
             <div class="log-entry animate-fade-in">
                 <span class="timestamp">[{formatTime(log.timestamp)}]</span>
@@ -73,7 +89,9 @@
     .log-terminal {
         display: flex;
         flex-direction: column;
-        max-height: 200px;
+        flex: 1; /* Take remaining height */
+        min-height: 0; /* Important for scroll in flex */
+        overflow: hidden; /* Prevent container overflow */
     }
 
     .panel-header {
@@ -129,6 +147,8 @@
     }
 
     @keyframes blink {
-        50% { opacity: 0; }
+        50% {
+            opacity: 0;
+        }
     }
 </style>

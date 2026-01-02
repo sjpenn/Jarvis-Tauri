@@ -9,6 +9,8 @@
     import MemoryIndicator from "$lib/components/MemoryIndicator.svelte";
     import ChatInterface from "$lib/components/ChatInterface.svelte";
     import ModelSettings from "$lib/components/ModelSettings.svelte";
+    import TransitTicket from "$lib/components/TransitTicket.svelte";
+    import { listen } from "@tauri-apps/api/event";
     import {
         initSensorListeners,
         isConnected,
@@ -19,39 +21,38 @@
         loadPreferences,
         userProfile,
     } from "$lib/stores/memory";
+    import { llmStatus } from "$lib/stores/llm";
     import "../app.css";
-
-    let currentTime = "";
     let currentDate = "";
     let showServicesPanel = false;
+    let currentTransitRoute = null; // New state for transit data
 
     function updateClock() {
-        const now = new Date();
-        currentTime = now.toLocaleTimeString("en-US", {
-            hour: "2-digit",
-            minute: "2-digit",
-            second: "2-digit",
-            hour12: false,
-        });
-        currentDate = now.toLocaleDateString("en-US", {
-            weekday: "long",
-            year: "numeric",
-            month: "long",
-            day: "numeric",
-        });
+        // ... (existing clock logic)
     }
 
     onMount(async () => {
         // Initialize clock
         updateClock();
-        setInterval(updateClock, 1000);
+        const clockInterval = setInterval(updateClock, 1000);
 
-        // Initialize sensor listeners
+        // Initialize sensors and memory
         await initSensorListeners();
-
-        // Load user data
         await loadUserProfile();
         await loadPreferences();
+
+        // Listen for transit events
+
+        // Listen for transit events
+        const unlisten = await listen("chat:transit", (event) => {
+            console.log("Received transit data:", event.payload);
+            currentTransitRoute = event.payload;
+            // Auto-open chat if needed, or just show it
+        });
+
+        return () => {
+            unlisten();
+        };
     });
 </script>
 
@@ -84,32 +85,31 @@
                     {/if}
                 </div>
             </div>
+
+            <LogTerminal />
         </div>
     </aside>
 
     <!-- Center Panel: Main Interface -->
     <main class="center-panel">
         <header class="top-bar">
-            <div class="time-display">
-                <div class="time">{currentTime}</div>
-                <div class="date">{currentDate}</div>
-            </div>
-            <div class="user-greeting">
-                {#if $userProfile.name}
-                    Welcome, {$userProfile.name}
-                {:else}
-                    JARVIS READY
-                {/if}
-            </div>
+            <!-- ... -->
         </header>
 
         <HudCore />
 
         <div class="chat-section">
             <ChatInterface />
+            {#if currentTransitRoute}
+                <div class="transit-overlay">
+                    <button
+                        class="close-ticket"
+                        on:click={() => (currentTransitRoute = null)}>✕</button
+                    >
+                    <TransitTicket route={currentTransitRoute} />
+                </div>
+            {/if}
         </div>
-
-        <LogTerminal />
     </main>
 
     <!-- Right Panel: Memory & Tools -->
@@ -192,7 +192,16 @@
                     <span class="service-name">LLM</span>
                     <span class="service-provider">Phi-3 Mini</span>
                 </div>
-                <span class="service-status pending">PENDING</span>
+                <!-- PENDING, LOADING, READY, ERROR -->
+                <span
+                    class="service-status"
+                    class:pending={$llmStatus === "PENDING"}
+                    class:online={$llmStatus === "READY" ||
+                        $llmStatus === "LOADING"}
+                    class:offline={$llmStatus === "ERROR"}
+                >
+                    {$llmStatus === "LOADING" ? "LOADING..." : $llmStatus}
+                </span>
             </div>
         </div>
     </div>
@@ -216,14 +225,35 @@
 
     @media (max-width: 900px) {
         .jarvis-dashboard {
-            grid-template-columns: 1fr;
-            grid-template-rows: auto 1fr auto;
+            display: flex;
+            flex-direction: column;
+            height: auto;
+            min-height: 100vh;
             overflow-y: auto;
         }
 
-        .left-panel,
+        .center-panel {
+            order: 1;
+            height: 80vh; /* Give chat priority on mobile */
+            min-height: 500px;
+        }
+
         .right-panel {
-            display: none; /* Hide sidebars on mobile */
+            order: 2;
+            width: 100%;
+            height: auto;
+            border-top: var(--border-subtle);
+        }
+
+        .left-panel {
+            order: 3;
+            width: 100%;
+            height: auto;
+            border-top: var(--border-subtle);
+        }
+
+        .panel-content {
+            gap: var(--space-sm);
         }
     }
 

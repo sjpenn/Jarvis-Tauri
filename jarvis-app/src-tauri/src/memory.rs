@@ -288,10 +288,29 @@ impl MemoryStore {
             }
         }
 
-        // Preferences
-        if !prefs.is_empty() {
+        // Preferences & System Context
+        let mut system_prefs = Vec::new();
+        let mut user_prefs = Vec::new();
+        
+        for pref in &prefs {
+            if pref.category == "system" {
+                system_prefs.push(pref);
+            } else {
+                user_prefs.push(pref);
+            }
+        }
+
+        // Add explicit location context if available
+        let city = system_prefs.iter().find(|p| p.key == "city").map(|p| p.value.as_str());
+        let region = system_prefs.iter().find(|p| p.key == "region").map(|p| p.value.as_str());
+        
+        if let (Some(c), Some(r)) = (city, region) {
+            summary.push_str(&format!("Current Location: {}, {}.\n", c, r));
+        }
+
+        if !user_prefs.is_empty() {
             summary.push_str("\nUser preferences:\n");
-            for pref in &prefs {
+            for pref in user_prefs {
                 summary.push_str(&format!("- {}/{}: {}\n", pref.category, pref.key, pref.value));
             }
         }

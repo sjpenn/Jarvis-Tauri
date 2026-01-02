@@ -11,15 +11,17 @@ mod sensor;
 mod memory;
 mod external;
 mod llm;
+mod gtfs;
 
 use sensor::{SensorState, start_sensor_stream};
 use memory::MemoryStore;
+use gtfs::GtfsState;
 use tauri::Manager;
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
-    // Initialize logging
-    env_logger::init();
+    // Initialize logging with info level default
+    env_logger::Builder::from_env(env_logger::Env::default().default_filter_or("info")).init();
 
     // Build the app
     tauri::Builder::default()
@@ -30,18 +32,69 @@ pub fn run() {
             // Initialize memory store
             let memory_store = MemoryStore::new(None)
                 .expect("Failed to initialize memory store");
+            
+            // Try to load saved model path
+            let saved_model_path = memory_store.get_preference("llm", "model_path")
+                .ok()
+                .flatten()
+                .map(std::path::PathBuf::from);
+
+            // Store WMATA API Key directly
+            let _ = memory_store.set_preference("transport", "wmata_api_key", "afa4f0928b2e4a078c2a5bada6fe2411");
+
             app.manage(memory_store);
             
             // Initialize sensor state
             let sensor_state = SensorState::new();
             app.manage(sensor_state);
             
-            // Initialize LLM engine (model path can be set later via command)
-            llm::init_llm_engine(None)
+            // Initialize GTFS manager
+            let gtfs_manager = gtfs::GtfsManager::new();
+            // Try to load WMATA Rail by default
+            let _ = gtfs_manager.load_feed("wmata-rail");
+            app.manage(GtfsState(gtfs_manager));
+            
+            // Initialize LLM engine with saved path if available
+            llm::init_llm_engine(saved_model_path)
                 .expect("Failed to initialize LLM engine");
             
             // Start sensor streaming
             start_sensor_stream(app.handle().clone());
+            
+            // Fetch system location in background
+            let handle = app.handle().clone();
+            tauri::async_runtime::spawn(async move {
+                loop {
+                    match external::get_system_location().await {
+                        Ok(loc) => {
+                            log::info!("System location detected: {}, {}", loc.city, loc.region);
+                            let state = handle.state::<MemoryStore>();
+                            let _ = state.set_preference("system", "city", &loc.city);
+                            let _ = state.set_preference("system", "region", &loc.region);
+                            let _ = state.set_preference("system", "country", &loc.country);
+                            let _ = state.set_preference("system", "latitude", &loc.lat.to_string());
+                            let _ = state.set_preference("system", "longitude", &loc.lon.to_string());
+                            let _ = state.set_preference("system", "timezone", &loc.timezone);
+                        }
+                        Err(e) => {
+                            log::error!("Failed to fetch system location: {}", e);
+                        }
+                    }
+                    // Update every 60 minutes
+                    tokio::time::sleep(std::time::Duration::from_secs(3600)).await;
+                }
+            });
+            
+            // Resize window to 80% of screen
+            if let Some(window) = app.get_webview_window("main") {
+                if let Ok(Some(monitor)) = window.current_monitor() {
+                    let screen_size = monitor.size();
+                    let width = (screen_size.width as f64 * 0.8) as u32;
+                    let height = (screen_size.height as f64 * 0.8) as u32;
+                    let _ = window.set_size(tauri::Size::Physical(tauri::PhysicalSize { width, height }));
+                    let _ = window.center();
+                }
+            }
             
             log::info!("JARVIS backend initialized successfully");
             Ok(())
@@ -63,6 +116,11 @@ pub fn run() {
             external::get_weather,
             external::get_train_times,
             external::get_nearby_flights,
+            // GTFS commands
+            gtfs::download_gtfs_feed,
+            gtfs::load_gtfs_feed,
+            gtfs::get_gtfs_stops,
+            gtfs::find_closest_stop,
             // LLM commands
             llm::chat,
             llm::start_chat_stream,

@@ -2,54 +2,115 @@
   ChatInterface.svelte - Main chat UI with streaming support
 -->
 <script lang="ts">
-    import { messages, currentResponse, isProcessing, sendMessage } from '$lib/stores/chat';
-    import { memoryAccessActive } from '$lib/stores/memory';
-    import { afterUpdate } from 'svelte';
+    import {
+        messages,
+        currentResponse,
+        isProcessing,
+        sendMessage,
+        startStreamingChat,
+    } from "$lib/stores/chat";
+    import { memoryAccessActive } from "$lib/stores/memory";
+    import { afterUpdate, tick } from "svelte";
 
-    let inputValue = '';
+    let inputValue = "";
     let messagesEl: HTMLDivElement;
+    let ttsEnabled = false;
+    let lastSpokenId = "";
 
     async function handleSubmit() {
         if (!inputValue.trim() || $isProcessing) return;
-        
+
         const message = inputValue;
-        inputValue = '';
-        await sendMessage(message);
+        inputValue = "";
+        await startStreamingChat(message); // Use streaming
     }
 
     function handleKeydown(e: KeyboardEvent) {
-        if (e.key === 'Enter' && !e.shiftKey) {
+        if (e.key === "Enter" && !e.shiftKey) {
             e.preventDefault();
             handleSubmit();
         }
     }
 
+    // Auto-scroll to bottom
     afterUpdate(() => {
         if (messagesEl) {
             messagesEl.scrollTop = messagesEl.scrollHeight;
         }
     });
+
+    // TTS Logic
+    $: if (ttsEnabled && $messages.length > 0) {
+        const lastMsg = $messages[$messages.length - 1];
+        if (
+            lastMsg.role === "assistant" &&
+            lastMsg.id !== lastSpokenId &&
+            !$isProcessing
+        ) {
+            lastSpokenId = lastMsg.id;
+            speak(lastMsg.content);
+        }
+    }
+
+    function speak(text: string) {
+        if (!window.speechSynthesis) return;
+
+        // Cancel any current speech
+        window.speechSynthesis.cancel();
+
+        const utterance = new SpeechSynthesisUtterance(text);
+        // Select a voice if needed, or stick to default
+        // const voices = window.speechSynthesis.getVoices();
+        // utterance.voice = voices.find(v => v.name.includes("Google US English")) || null;
+
+        utterance.rate = 1.0;
+        utterance.pitch = 1.0;
+        window.speechSynthesis.speak(utterance);
+    }
+
+    function toggleTTS() {
+        ttsEnabled = !ttsEnabled;
+        if (!ttsEnabled) {
+            window.speechSynthesis.cancel();
+        }
+    }
 </script>
 
 <div class="chat-interface panel">
     <div class="panel-header">
         <span>JARVIS INTERFACE</span>
-        {#if $isProcessing}
-            <span class="processing-indicator">PROCESSING...</span>
-        {/if}
+        <div class="header-controls">
+            <button
+                class="icon-btn"
+                class:active={ttsEnabled}
+                on:click={toggleTTS}
+                title={ttsEnabled ? "Disable Voice" : "Enable Voice"}
+            >
+                {ttsEnabled ? "🔊" : "🔇"}
+            </button>
+            {#if $isProcessing}
+                <span class="processing-indicator">PROCESSING...</span>
+            {/if}
+        </div>
     </div>
 
     <div class="messages" bind:this={messagesEl}>
         {#if $messages.length === 0}
             <div class="welcome">
                 <div class="welcome-icon">J</div>
-                <p>Hello. I am <strong>JARVIS</strong>, your personal assistant.</p>
+                <p>
+                    Hello. I am <strong>JARVIS</strong>, your personal
+                    assistant.
+                </p>
                 <p class="hint">How may I assist you today?</p>
             </div>
         {/if}
 
         {#each $messages as msg (msg.id)}
-            <div class="message {msg.role}" class:has-context={msg.memoryContextUsed}>
+            <div
+                class="message {msg.role}"
+                class:has-context={msg.memoryContextUsed}
+            >
                 <div class="message-content">
                     {msg.content}
                 </div>
@@ -80,8 +141,8 @@
             on:keydown={handleKeydown}
             disabled={$isProcessing}
         />
-        <button 
-            class="btn btn-primary send-btn" 
+        <button
+            class="btn btn-primary send-btn"
             on:click={handleSubmit}
             disabled={$isProcessing || !inputValue.trim()}
         >
@@ -113,6 +174,33 @@
         color: var(--primary-blue);
     }
 
+    .header-controls {
+        display: flex;
+        align-items: center;
+        gap: var(--space-md);
+    }
+
+    .icon-btn {
+        background: transparent;
+        border: none;
+        cursor: pointer;
+        padding: 4px;
+        border-radius: 4px;
+        transition: all 0.2s ease;
+        opacity: 0.7;
+        font-size: 1rem;
+    }
+
+    .icon-btn:hover {
+        opacity: 1;
+        background: rgba(255, 255, 255, 0.1);
+    }
+
+    .icon-btn.active {
+        opacity: 1;
+        text-shadow: 0 0 10px var(--primary-blue);
+    }
+
     .processing-indicator {
         color: var(--warning-yellow);
         animation: blink 1s infinite;
@@ -137,7 +225,11 @@
         width: 60px;
         height: 60px;
         margin: 0 auto var(--space-md);
-        background: linear-gradient(135deg, var(--tertiary-blue), var(--secondary-blue));
+        background: linear-gradient(
+            135deg,
+            var(--tertiary-blue),
+            var(--secondary-blue)
+        );
         border-radius: 50%;
         display: flex;
         align-items: center;
@@ -175,7 +267,11 @@
     }
 
     .user .message-content {
-        background: linear-gradient(135deg, var(--tertiary-blue), var(--secondary-blue));
+        background: linear-gradient(
+            135deg,
+            var(--tertiary-blue),
+            var(--secondary-blue)
+        );
         color: var(--text-primary);
     }
 
@@ -227,15 +323,25 @@
     }
 
     @keyframes fade-in {
-        from { opacity: 0; transform: translateY(10px); }
-        to { opacity: 1; transform: translateY(0); }
+        from {
+            opacity: 0;
+            transform: translateY(10px);
+        }
+        to {
+            opacity: 1;
+            transform: translateY(0);
+        }
     }
 
     @keyframes blink {
-        50% { opacity: 0; }
+        50% {
+            opacity: 0;
+        }
     }
 
     @keyframes spin {
-        to { transform: rotate(360deg); }
+        to {
+            transform: rotate(360deg);
+        }
     }
 </style>
